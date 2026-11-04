@@ -12,11 +12,14 @@
 
 import React from 'react';
 import { Discovery } from '../db/database';
-import { IconStar, IconTrophy, IconRefresh } from '../components/Icons';
+import { IconStar, IconTrophy, IconRefresh, IconAward, IconCamera, IconGrid } from '../components/Icons';
 
 interface HallOfFameProps {
   discoveries: Discovery[];
   onSelectDiscovery: (id: string) => void;
+  onNavigateCapture?: () => void;
+  onNavigateCollection?: () => void;
+  onResetSample?: () => void;
 }
 
 const StarRatingDisplay = ({ rating }: { rating: number }) => (
@@ -32,7 +35,13 @@ const StarRatingDisplay = ({ rating }: { rating: number }) => (
   </div>
 );
 
-export const HallOfFame: React.FC<HallOfFameProps> = ({ discoveries, onSelectDiscovery }) => {
+export const HallOfFame: React.FC<HallOfFameProps> = ({
+  discoveries,
+  onSelectDiscovery,
+  onNavigateCapture,
+  onNavigateCollection,
+  onResetSample,
+}) => {
   const hallOfFameItems = discoveries.filter(d => d.isHallOfFame);
   const featured = hallOfFameItems[0] || null;
   const rest = hallOfFameItems.slice(1);
@@ -62,7 +71,7 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({ discoveries, onSelectDis
           <span className="text-xs font-mono font-bold tracking-widest text-[#E8B92D] uppercase bg-black px-2 py-0.5 rounded shadow-brutal-sm">
             Museum Exhibition
           </span>
-          {hallOfFameItems.length > 0 && (
+          {hallOfFameItems.length > 1 && (
             <button
               onClick={handleRandomPick}
               className="text-xs font-mono font-bold text-[#D66A4A] hover:underline cursor-pointer flex items-center gap-1"
@@ -77,17 +86,19 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({ discoveries, onSelectDis
         <p className="text-xs text-gray-600 mt-1 font-mono">
           {hallOfFameItems.length > 0
             ? `${hallOfFameItems.length} inducted specimen${hallOfFameItems.length !== 1 ? 's' : ''} enshrined in typographical glory.`
-            : 'Enshrine your most hilarious typographical discoveries from their detail view.'}
+            : discoveries.length > 0
+            ? 'No official inductees yet. Highlighting your highest-rated discovery.'
+            : 'Enshrine your most hilarious typographical discoveries from their detail dossier.'}
         </p>
       </div>
 
-      {/* Featured Masterpiece */}
+      {/* Featured Masterpiece or Empty Exhibition */}
       {displayFeatured ? (
         <section className="mb-8" aria-label="Featured legend specimen">
-          <div className="flex items-center gap-2 mb-2.5">
+          <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs font-bold tracking-widest uppercase font-heading text-[#D66A4A] flex items-center gap-1.5">
               <IconTrophy size={14} filled={true} />
-              <span>{featured ? 'Masterpiece Inductee' : 'Highest Rated Specimen'}</span>
+              <span>{featured ? 'Masterpiece Inductee' : 'Provisional Spotlight (Highest Rated)'}</span>
             </span>
             <span className="font-mono text-[10px] bg-black text-[#E8B92D] px-1.5 py-0.2 rounded font-bold">
               #{String(displayFeatured.discoveryNumber).padStart(3, '0')}
@@ -139,14 +150,66 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({ discoveries, onSelectDis
           </div>
         </section>
       ) : (
-        <div className="editorial-card p-10 text-center rounded-2xl bg-white mb-8">
-          <div className="w-14 h-14 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto mb-3 shadow-brutal-sm">
-            <IconTrophy size={26} className="text-black" />
+        /* Rich Empty State when 0 discoveries in total */
+        <div className="editorial-card p-8 sm:p-10 text-center rounded-2xl bg-white mb-8 border-2 border-black shadow-brutal">
+          <div className="w-16 h-16 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-brutal-sm">
+            <IconTrophy size={28} className="text-[#D66A4A]" />
           </div>
-          <h3 className="font-heading font-extrabold text-xl mb-1">No Legends Inducted Yet</h3>
-          <p className="text-xs text-gray-600 max-w-xs mx-auto leading-relaxed mb-4">
-            Tap the trophy icon on any specimen in your collection to enshrine it into the Hall of Fame.
+          <div className="inline-block bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
+            Curatorial Exhibition Status: Empty
+          </div>
+          <h3 className="font-heading font-extrabold text-xl text-black mb-1">
+            Hall of Fame Awaiting Inductees
+          </h3>
+          <p className="text-xs font-mono text-gray-600 max-w-sm mx-auto leading-relaxed mb-6">
+            No typographical specimens have been cataloged in your museum yet. Document language blunders in the wild to inaugurate this prestigious exhibition wing.
           </p>
+          <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
+            {onNavigateCapture && (
+              <button
+                type="button"
+                onClick={onNavigateCapture}
+                className="btn-primary py-2.5 px-5 rounded-xl text-xs uppercase font-extrabold tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-brutal-sm"
+              >
+                <IconCamera size={14} />
+                <span>Spot a Typo Now</span>
+              </button>
+            )}
+            {onResetSample && (
+              <button
+                type="button"
+                onClick={onResetSample}
+                className="btn-secondary py-2.5 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
+              >
+                Load Sample Archive (Demo)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* When specimens exist but none are officially inducted into Hall of Fame */}
+      {discoveries.length > 0 && hallOfFameItems.length === 0 && (
+        <div className="editorial-card p-6 rounded-2xl bg-[#FFF9EC] border-2 border-black text-center mb-6 shadow-brutal-sm">
+          <div className="w-10 h-10 bg-white border-2 border-black rounded-full flex items-center justify-center mx-auto mb-2 shadow-brutal-sm">
+            <IconAward size={20} className="text-[#D66A4A]" />
+          </div>
+          <h4 className="font-heading font-extrabold text-sm text-black mb-1">
+            Enshrine Official Hall of Fame Legends
+          </h4>
+          <p className="text-xs text-gray-700 font-mono max-w-sm mx-auto mb-3 leading-relaxed">
+            The specimen above is currently showcased based on rating. To permanently induct items into the Hall of Fame, open any specimen dossier and tap the Trophy icon.
+          </p>
+          {onNavigateCollection && (
+            <button
+              type="button"
+              onClick={onNavigateCollection}
+              className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold tracking-wider inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <IconGrid size={13} />
+              <span>Browse All Specimens →</span>
+            </button>
+          )}
         </div>
       )}
 

@@ -776,12 +776,38 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white p-6 rounded-2xl border-2 border-black text-center font-mono text-xs text-gray-500">
-                    <IconTrophy size={28} className="mx-auto mb-2 text-gray-300" />
-                    <p className="font-bold text-black mb-1">No PvP Battles Recorded Yet</p>
-                    <p className="text-[11px]">
-                      Challenge a friend with a Speed Blitz QR or execute a Quick Duel to start your competitive record.
-                    </p>
+                  <div className="bg-white p-7 rounded-2xl border-2 border-black text-center font-mono space-y-3 shadow-brutal-sm">
+                    <div className="w-14 h-14 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto shadow-brutal-sm">
+                      <IconSwords size={24} className="text-[#D66A4A]" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1.5">
+                        Battle Ledger Clean
+                      </span>
+                      <h4 className="font-heading font-extrabold text-base text-black mb-1">
+                        No PvP Matches Recorded Yet
+                      </h4>
+                      <p className="text-xs text-gray-600 max-w-xs mx-auto leading-relaxed">
+                        Challenge rival curators to timed Speed Blitz hunts or scan their Curator Pass QR to initiate a Quick Duel and write to this ledger.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('duel')}
+                        className="btn-primary py-2 px-4 rounded-xl text-xs uppercase font-extrabold tracking-wider cursor-pointer shadow-brutal-sm flex items-center justify-center gap-1.5"
+                      >
+                        <IconSwords size={12} />
+                        <span>Enter Quick Duel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('timer')}
+                        className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
+                      >
+                        Create Speed Blitz
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

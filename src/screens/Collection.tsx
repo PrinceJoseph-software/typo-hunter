@@ -15,15 +15,21 @@
 import React, { useState, useMemo } from 'react';
 import { Discovery } from '../db/database';
 import { CATEGORIES } from '../utils/constants';
-import { IconHeart, IconSearch, IconGrid, IconTrophy, IconClose, IconStar } from '../components/Icons';
+import { IconHeart, IconSearch, IconGrid, IconTrophy, IconClose, IconStar, IconCamera } from '../components/Icons';
 
 interface CollectionProps {
   discoveries: Discovery[];
   onSelectDiscovery: (id: string) => void;
   onNavigateCapture: () => void;
+  onResetSample?: () => void;
 }
 
-export const Collection: React.FC<CollectionProps> = ({ discoveries, onSelectDiscovery, onNavigateCapture }) => {
+export const Collection: React.FC<CollectionProps> = ({
+  discoveries,
+  onSelectDiscovery,
+  onNavigateCapture,
+  onResetSample,
+}) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'favorites'>('newest');
@@ -292,32 +298,72 @@ export const Collection: React.FC<CollectionProps> = ({ discoveries, onSelectDis
           </div>
         )
       ) : (
-        <div className="editorial-card p-10 text-center rounded-2xl bg-white mt-4">
-          <div className="w-12 h-12 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto mb-3 shadow-brutal-sm">
-            <IconSearch size={22} className="text-black" />
+        <div className="editorial-card p-8 sm:p-10 text-center rounded-2xl bg-white mt-4 border-2 border-black shadow-brutal">
+          <div className="w-16 h-16 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-brutal-sm">
+            {hasActiveFilter ? (
+              <IconSearch size={26} className="text-black" />
+            ) : (
+              <IconCamera size={26} className="text-[#D66A4A]" />
+            )}
           </div>
-          <h3 className="font-heading font-extrabold text-lg mb-1">
-            {hasActiveFilter ? 'No Specimens Found' : 'Archive Is Empty'}
+          <div className="inline-block bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
+            {hasActiveFilter ? 'Filter Predicate Zero Matches' : 'Archive Repository Status: Empty'}
+          </div>
+          <h3 className="font-heading font-extrabold text-xl text-black mb-1">
+            {hasActiveFilter ? 'No Matching Specimens Found' : 'Museum Archive Is Empty'}
           </h3>
-          <p className="text-xs text-gray-600 mb-5 max-w-xs mx-auto leading-relaxed">
-            {hasActiveFilter
-              ? 'No discoveries match your active search terms or category filters.'
-              : 'Start building your visual archive by capturing your first typo in the wild.'}
+          <p className="text-xs font-mono text-gray-600 mb-5 max-w-sm mx-auto leading-relaxed">
+            {hasActiveFilter ? (
+              <span>
+                No cataloged typos match your query
+                {search && <> containing <strong>"{search}"</strong></>}
+                {selectedCategory !== 'ALL' && <> in category <strong>[{selectedCategory}]</strong></>}
+                {sortBy === 'favorites' && <> marked as favorite</>}.
+              </span>
+            ) : (
+              'Start documenting language blunders in the wild, or load the curator sample archive to explore the full museum system.'
+            )}
           </p>
+
           {hasActiveFilter ? (
-            <button
-              onClick={() => { setSearch(''); setSelectedCategory('ALL'); setSortBy('newest'); }}
-              className="btn-primary py-2 px-4 rounded-xl text-xs uppercase font-bold"
-            >
-              Reset Filters
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
+                >
+                  Clear Search Term
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { setSearch(''); setSelectedCategory('ALL'); setSortBy('newest'); }}
+                className="btn-primary py-2.5 px-5 rounded-xl text-xs uppercase font-extrabold tracking-wider cursor-pointer shadow-brutal-sm"
+              >
+                Reset All Filters
+              </button>
+            </div>
           ) : (
-            <button
-              onClick={onNavigateCapture}
-              className="btn-primary py-2.5 px-5 rounded-xl text-xs uppercase font-bold"
-            >
-              Spot a Typo Now
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
+              <button
+                type="button"
+                onClick={onNavigateCapture}
+                className="btn-primary py-2.5 px-5 rounded-xl text-xs uppercase font-extrabold tracking-wider flex items-center justify-center gap-1.5 cursor-pointer shadow-brutal-sm"
+              >
+                <IconCamera size={14} />
+                <span>Spot a Typo Now</span>
+              </button>
+              {onResetSample && (
+                <button
+                  type="button"
+                  onClick={onResetSample}
+                  className="btn-secondary py-2.5 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
+                >
+                  Load Sample Archive (Demo)
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
