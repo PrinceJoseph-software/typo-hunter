@@ -277,46 +277,76 @@ export async function generatePvpVictoryCardBlob(match: PvpMatchRecord): Promise
   ctx.lineWidth = 4;
   ctx.strokeRect(80, 340, 920, 520);
 
-  // Player Column
-  ctx.fillStyle = '#282722';
-  ctx.font = '700 24px "Courier Prime", monospace';
-  ctx.fillText(`TEAM: ${match.playerTeam.toUpperCase()}`, 120, 400);
-
-  ctx.font = '900 48px "Space Grotesk", sans-serif';
-  ctx.fillText(match.playerNickname, 120, 460);
-
-  ctx.font = '900 110px "Space Grotesk", sans-serif';
-  ctx.fillStyle = '#D66A4A';
-  ctx.fillText(`${match.playerScore}`, 120, 580);
-  ctx.font = '700 24px "Courier Prime", monospace';
-  ctx.fillStyle = '#666666';
-  ctx.fillText('POINTS CATALOGED', 120, 620);
-
-  // Center Divider & VS Badge
-  ctx.fillStyle = '#282722';
+  // Subtle Center Dashed Separator
+  ctx.save();
+  ctx.strokeStyle = '#D9CEBF';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
   ctx.beginPath();
-  ctx.arc(540, 600, 45, 0, Math.PI * 2);
+  ctx.moveTo(540, 380);
+  ctx.lineTo(540, 640);
+  ctx.stroke();
+  ctx.restore();
+
+  // Player Column (Left)
+  ctx.fillStyle = '#282722';
+  ctx.font = '700 22px "Courier Prime", monospace';
+  ctx.fillText(`TEAM: ${match.playerTeam.toUpperCase()}`, 120, 400, 360);
+
+  ctx.font = '900 44px "Space Grotesk", sans-serif';
+  ctx.fillText(match.playerNickname, 120, 455, 360);
+
+  ctx.font = '900 100px "Space Grotesk", sans-serif';
+  ctx.fillStyle = '#D66A4A';
+  ctx.fillText(`${match.playerScore}`, 120, 570);
+  ctx.font = '700 22px "Courier Prime", monospace';
+  ctx.fillStyle = '#666666';
+  ctx.fillText('POINTS CATALOGED', 120, 615);
+
+  // Opponent Column (Right)
+  ctx.fillStyle = '#282722';
+  ctx.font = '700 22px "Courier Prime", monospace';
+  ctx.fillText(`TEAM: ${match.opponentTeam.toUpperCase()}`, 600, 400, 360);
+
+  ctx.font = '900 44px "Space Grotesk", sans-serif';
+  ctx.fillText(match.opponentName, 600, 455, 360);
+
+  ctx.font = '900 100px "Space Grotesk", sans-serif';
+  ctx.fillStyle = '#282722';
+  ctx.fillText(`${match.opponentScore}`, 600, 570);
+  ctx.font = '700 22px "Courier Prime", monospace';
+  ctx.fillStyle = '#666666';
+  ctx.fillText('POINTS BENCHMARK', 600, 615);
+
+  // Centered VS Badge (Vertically and Horizontally Aligned Between Competitors)
+  const vsX = 540;
+  const vsY = 515;
+  const vsRadius = 40;
+
+  // Background circle with brutalist paper outline
+  ctx.beginPath();
+  ctx.arc(vsX, vsY, vsRadius, 0, Math.PI * 2);
+  ctx.fillStyle = '#282722';
   ctx.fill();
-  ctx.font = '900 32px "Space Grotesk", sans-serif';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#FFFDF9';
+  ctx.stroke();
+
+  // Outer thin brutal border
+  ctx.beginPath();
+  ctx.arc(vsX, vsY, vsRadius + 2, 0, Math.PI * 2);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#282722';
+  ctx.stroke();
+
+  // VS Typography perfectly centered
+  ctx.font = '900 28px "Space Grotesk", sans-serif';
   ctx.fillStyle = '#E8B92D';
   ctx.textAlign = 'center';
-  ctx.fillText('VS', 540, 612);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('VS', vsX, vsY + 1);
   ctx.textAlign = 'left';
-
-  // Opponent Column
-  ctx.fillStyle = '#282722';
-  ctx.font = '700 24px "Courier Prime", monospace';
-  ctx.fillText(`TEAM: ${match.opponentTeam.toUpperCase()}`, 580, 400);
-
-  ctx.font = '900 48px "Space Grotesk", sans-serif';
-  ctx.fillText(match.opponentName, 580, 460);
-
-  ctx.font = '900 110px "Space Grotesk", sans-serif';
-  ctx.fillStyle = '#282722';
-  ctx.fillText(`${match.opponentScore}`, 580, 580);
-  ctx.font = '700 24px "Courier Prime", monospace';
-  ctx.fillStyle = '#666666';
-  ctx.fillText('POINTS BENCHMARK', 580, 620);
+  ctx.textBaseline = 'alphabetic';
 
   // Delta Ribbon
   ctx.fillStyle = '#FAF6EE';
