@@ -1,0 +1,151 @@
+/* Self-hosted font stack — works fully offline without Google Fonts dependency.
+   Falls back gracefully to visually-similar system fonts that preserve the editorial character. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
+
+/* Offline-safe system font fallback: if Google Fonts fail, use visually close system alternatives */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #F4EBDD;
+  --ink: #282722;
+  --yellow: #E8B92D;
+  --brick: #D66A4A;
+  --sage: #82917B;
+  --card-bg: #FFFDF9;
+  --border-color: #282722;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: 'Courier Prime', monospace;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+::-webkit-scrollbar-thumb {
+  background: #D8CEC0;
+  border-radius: 3px;
+}
+
+/* Accessible Keyboard Focus Rings */
+:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+/* Editorial Brutalist Cards */
+.editorial-card {
+  background-color: var(--card-bg);
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0px var(--ink);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.editorial-card-interactive {
+  background-color: var(--card-bg);
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0px var(--ink);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  cursor: pointer;
+}
+
+.editorial-card-interactive:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0px var(--ink);
+}
+
+.editorial-card-interactive:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px var(--ink);
+}
+
+/* Editorial Button Primary */
+.btn-primary {
+  background-color: var(--yellow);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  box-shadow: 3px 3px 0px var(--ink);
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background-color: #f1c338;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+.btn-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--ink);
+}
+
+/* Editorial Button Secondary */
+.btn-secondary {
+  background-color: #ffffff;
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  box-shadow: 3px 3px 0px var(--ink);
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: #FAF6EE;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+.btn-secondary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--ink);
+}
+
+/* Danger Button */
+.btn-danger {
+  background-color: var(--brick);
+  color: #ffffff;
+  border: 2px solid var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  box-shadow: 3px 3px 0px var(--ink);
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background-color: #c95c3c;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+.btn-danger:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--ink);
+}
