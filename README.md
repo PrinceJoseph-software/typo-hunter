@@ -392,7 +392,7 @@ Curators can tailor street alerts and inactivity dispatches to match their prefe
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-username/typo-hunter.git
+git clone https://github.com/PrinceJoseph-software/typo-hunter.git
 cd typo-hunter
 
 # 2. Install dependencies
