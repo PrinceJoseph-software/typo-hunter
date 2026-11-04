@@ -26,6 +26,7 @@ import {
   IconDownload,
   IconRefresh,
   IconSwords,
+  IconCamera,
 } from '../components/Icons';
 import { CuratorPassModal } from '../components/CuratorPassModal';
 import { PrivacyModal } from '../components/PrivacyModal';
@@ -260,6 +261,34 @@ export const Profile: React.FC<ProfileProps> = ({
           Private on-device credentials, academic points, and museum statistics.
         </p>
       </div>
+
+      {/* Novice Empty State Callout when archive has 0 specimens */}
+      {count === 0 && (
+        <div className="editorial-card p-5 rounded-2xl bg-[#FFF9EC] border-2 border-black mb-6 shadow-brutal-sm text-center">
+          <div className="w-12 h-12 bg-white border-2 border-black rounded-full flex items-center justify-center mx-auto mb-2.5 shadow-brutal-sm">
+            <IconCamera size={22} className="text-[#D66A4A]" />
+          </div>
+          <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1">
+            Curator Level: Apprentice Scout
+          </span>
+          <h3 className="font-heading font-extrabold text-base text-black mb-1">
+            Dossier Ready for First Expedition
+          </h3>
+          <p className="text-xs font-mono text-gray-600 max-w-sm mx-auto leading-relaxed mb-3">
+            Your curatorial points, category exploration, and milestone awards will activate once you log your first specimen in the wild.
+          </p>
+          {onResetSample && (
+            <button
+              type="button"
+              onClick={onResetSample}
+              className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold tracking-wider inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <IconRefresh size={12} />
+              <span>Load Sample Archive to Preview</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Offline P2P Curator Pass Hero Card */}
       <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] mb-6 border-2 border-black shadow-brutal-sm">

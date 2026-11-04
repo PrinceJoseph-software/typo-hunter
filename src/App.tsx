@@ -270,6 +270,7 @@ export function App() {
               discoveries={discoveries}
               onSelectDiscovery={(id) => navigateTo('detail', id)}
               onNavigateCapture={() => setCurrentView('capture')}
+              onResetSample={handleResetSample}
             />
           )}
           {currentView === 'detail' && selectedDiscovery && (
@@ -300,6 +301,9 @@ export function App() {
             <HallOfFame
               discoveries={discoveries}
               onSelectDiscovery={(id) => navigateTo('detail', id)}
+              onNavigateCapture={() => setCurrentView('capture')}
+              onNavigateCollection={() => setCurrentView('collection')}
+              onResetSample={handleResetSample}
             />
           )}
           {currentView === 'profile' && (
