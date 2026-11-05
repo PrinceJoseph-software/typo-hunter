@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** 5 November 2026 (last updated 5 November 2026: fonts are now part of the app, so Google no longer receives any request)
+**Effective date:** 5 November 2026 (last updated 5 November 2026: fonts are now part of the app, so Google no longer receives any request; text in photos is read on your phone)
 
 Typo Hunter is a web app for photographing and collecting language mistakes. It is designed so that **your collection stays on your device**. This policy explains what the app stores, what leaves your device, and what choices you have.
 
@@ -19,6 +19,7 @@ The app uses your browser's built-in storage (IndexedDB and local storage) on yo
 |---|---|
 | Photos you capture (a full-size copy and a small thumbnail) | To build your collection |
 | What you type: titles, wording, corrections, locations, notes | To describe each find |
+| Text the app read from your photo | To fill in the wording and show the "Read by app" badge |
 | Ratings, favourites and Legends picks | Your personal curation |
 | Your locked points | Your score |
 | Your display name and squad | Shown on your pass and results |
@@ -41,9 +42,10 @@ Data leaves your device only in these cases:
 
 **No third parties.** Everything the app needs, including its fonts, is delivered from the app's own site. It makes no requests to Google, advertising networks, analytics services or any other third party. Once it has been opened, it works without a connection.
 
-## Camera and notifications
+## Camera, text reading and notifications
 
 - **Camera:** used only when you take a photo or scan a QR code. Images from the camera are processed on your device.
+- **Text reading:** the app reads the text in your photo **on your phone**. The first time you use it, the reading engine and an English word list (about 7 MB) download from this app's own site, then work offline. Your photo is never sent anywhere to be read. The text it finds is saved with your find, and a find whose wording matches it is marked "Read by app". That badge means the app read it on your phone; it isn't proof.
 - **Notifications:** off unless you turn them on. Reminders are created on your device. On some browsers they are scheduled by your browser's background sync. No push service or third-party notification server is used.
 
 ## Children and classrooms

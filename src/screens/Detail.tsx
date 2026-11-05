@@ -19,6 +19,7 @@ import { generateShareCardBlob } from '../utils/shareCard';
 import { generateProofOfSighting } from '../utils/proofOfSighting';
 import { pointsLedger } from '../utils/pointsLedger';
 import { useDiscoveryImage } from '../hooks/useDiscoveryImage';
+import { ReadByAppBadge } from '../components/ReadByAppBadge';
 import { IconHeart, IconTrophy, IconStar, IconArrowLeft, IconChevronDown } from '../components/Icons';
 
 interface DetailProps {
@@ -166,6 +167,11 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
               <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-black leading-tight">
                 {discovery.title}
               </h1>
+              {discovery.readByApp && (
+                <div className="mt-1.5">
+                  <ReadByAppBadge />
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 flex-shrink-0">

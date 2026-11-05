@@ -80,6 +80,8 @@ export interface EvidenceItem {
   thumbnail: string;
   points: number;
   capturedFresh: boolean;
+  /** The student's phone read this wording from the photo (helpful signal, not proof). */
+  readByApp?: boolean;
   /** null = not reviewed yet */
   approved: boolean | null;
   /** Why it was auto-flagged (outside class time, old gallery photo, …). */
@@ -281,6 +283,7 @@ export const teacherService = {
       thumbnail: d.thumbnail,
       points: calculateSpecimenScore(d).totalPoints,
       capturedFresh: d.capturedFresh === true,
+      readByApp: d.readByApp === true ? true : undefined,
     }));
     return {
       app: 'TYPO_HUNTER_CLASS_REVIEW',

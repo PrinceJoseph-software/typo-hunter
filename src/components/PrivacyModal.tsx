@@ -113,9 +113,14 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
             </p>
           </Section>
 
-          <Section title="Camera and notifications">
+          <Section title="Camera, text reading and notifications">
             <p>
               The camera is used only when you take a photo or scan a QR code, and images are processed on your device.
+            </p>
+            <p>
+              <strong>Text reading happens on your phone.</strong> The first time, the reading engine and word list
+              (about 7 MB) download from this app's own site; after that it works offline. Your photo is never sent
+              anywhere to be read. "Read by app" means the app read the wording on your phone, not that it's proven.
             </p>
             <p>
               Notifications are off unless you turn them on. Reminders are created on your device; on some browsers

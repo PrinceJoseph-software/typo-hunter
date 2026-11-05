@@ -6,13 +6,13 @@
 
 Typo Hunter turns your phone into a pocket museum for the language mistakes you find in the wild: the menu offering *"Soap of the Day"*, the sign warning that *"Trespassers will be composted"*, the price tag with an apostrophe that has no business being there.
 
-You snap the photo, write down what it said and what it *meant*, and the find joins your personal collection. It works offline, it needs no account, and your photos never leave your device.
+You snap the photo. The app reads the text right on your phone, highlights the words that look wrong and suggests what they *meant*. You check it, and the find joins your personal collection. It works offline, it needs no account, and your photos never leave your device.
 
 ---
 
 ## What it's like to use
 
-You spot something funny on a shop window. You tap the yellow **+**, take the picture, and fill in a few lines:
+You spot something funny on a shop window. You tap the yellow **+** and take the picture. The app reads it, flags *Coffe* and *Trea*, and suggests the fix. You tap the right one and add the details:
 
 - **What it said:** *Coffe and Trea*
 - **What they meant:** *Coffee and Tea*

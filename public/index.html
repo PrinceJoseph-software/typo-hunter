@@ -54,6 +54,8 @@
     <!-- For AI assistants and LLM crawlers -->
     <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM-readable summary" />
 
+    <link rel="stylesheet" href="../src/landing/landing.css" />
+
     <!-- Structured data -->
     <script type="application/ld+json">
       {
@@ -74,6 +76,7 @@
         "license": "https://opensource.org/licenses/MIT",
         "featureList": [
           "Photograph and catalogue typos with what was written and what was meant",
+          "Reads the text in photos on the device and flags misspelt words with suggestions",
           "Personal typo museum with search, categories and a Hall of Fame",
           "Points for well-documented finds, locked in once earned",
           "Offline QR-code duels, timed Speed Blitz rounds and squad battles",
@@ -92,27 +95,162 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
-    <noscript>
-      <main style="font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #282722;">
-        <h1>Typo Hunter</h1>
-        <p><strong>The world is full of typos. Someone has to collect them.</strong></p>
-        <p>
-          Typo Hunter is a free app for photographing and collecting language mistakes found in the wild: menus offering
-          "Soap of the Day", signs that went badly wrong, rogue apostrophes and hilarious translations. Write down what it
-          said and what it meant, and build your own typo museum.
-        </p>
-        <h2>Who it's for</h2>
-        <ul>
-          <li><strong>Collectors:</strong> keep every funny sign in one place, with the story behind it.</li>
-          <li><strong>Friends:</strong> phone-to-phone QR games with no internet needed: Quick Duel, Speed Blitz and squad battles.</li>
-          <li><strong>Teachers:</strong> run a class typo hunt; students hand in their photos and you approve each one.</li>
-          <li><strong>Language learners and travellers:</strong> learn from real mistakes and keep the best translations.</li>
-        </ul>
-        <p>Private by design: no account, no tracking, and your photos stay on your device. Works offline.</p>
-        <p>Typo Hunter needs JavaScript to run. Please enable it, or read the <a href="/privacy.html">privacy policy</a>.</p>
-      </main>
-    </noscript>
-    <script type="module" src="../src/main.tsx"></script>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-row">
+        <a class="brand" href="/" aria-label="Typo Hunter home">
+          <img src="/favicon.svg" alt="" width="32" height="32" />
+          <span>Typo Hunter</span>
+        </a>
+        <nav aria-label="Main">
+          <a href="#how">How it works</a>
+          <a href="#who">Who it's for</a>
+          <a href="#privacy">Privacy</a>
+        </nav>
+        <a class="btn btn-dark" href="/app/" data-open-app>Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="kicker">The typo museum in your pocket</p>
+            <h1>The world is full of typos. Someone has to collect them.</h1>
+            <p class="lead">
+              Snap a funny sign, menu or price tag. Typo Hunter reads the text, spots what's wrong, and adds it to your
+              own museum of language mistakes. Then challenge your friends, or turn it into a class activity.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-yellow btn-big" href="/app/" data-open-app data-primary-cta>Start hunting, free</a>
+              <a class="btn btn-light btn-big" href="#how">How it works</a>
+            </div>
+            <ul class="trust" aria-label="Highlights">
+              <li>Free</li>
+              <li>No account</li>
+              <li>Works offline</li>
+              <li>Your photos stay on your phone</li>
+            </ul>
+          </div>
+
+          <figure class="specimen" aria-label="Example find">
+            <div class="specimen-label">What it actually said</div>
+            <p class="specimen-said">Soa<span class="wrong">p</span> of the Day</p>
+            <div class="specimen-label">What they meant</div>
+            <p class="specimen-meant">Soup of the Day</p>
+            <figcaption>
+              <span class="chip">Menus</span>
+              <span class="chip chip-yellow">+120 pts</span>
+              <span class="chip chip-read">✓ Read by app</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section id="how" class="section">
+        <div class="wrap">
+          <h2>How it works</h2>
+          <ol class="steps">
+            <li>
+              <span class="step-no">1</span>
+              <h3>Snap it</h3>
+              <p>Spot something funny? Tap the yellow <strong>+</strong> and take a photo of the sign, menu or label.</p>
+            </li>
+            <li>
+              <span class="step-no">2</span>
+              <h3>The app reads it</h3>
+              <p>Typo Hunter reads the text on your phone, highlights words that look wrong and suggests what they meant. You check it and fill in the rest.</p>
+            </li>
+            <li>
+              <span class="step-no">3</span>
+              <h3>Collect and compete</h3>
+              <p>Earn points for well-documented finds, keep your favourites in your Hall of Fame, and battle friends phone to phone.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Who it's for -->
+      <section id="who" class="section section-alt">
+        <div class="wrap">
+          <h2>Who it's for</h2>
+          <div class="cards">
+            <article class="card">
+              <h3>Collectors</h3>
+              <p>You already photograph funny signs, then lose them in a camera roll of thousands. Keep them in one place, with the story behind each one.</p>
+            </article>
+            <article class="card">
+              <h3>Friends on the move</h3>
+              <p>Turn a walk or a trip into a game. Quick Duels, timed Speed Blitz rounds and squad battles work screen to screen by QR code, with no internet needed.</p>
+            </article>
+            <article class="card">
+              <h3>Teachers and classrooms</h3>
+              <p>Run a class typo hunt in minutes. Students join with one code, hunt during the lesson and hand in their photos, and you approve each one.</p>
+            </article>
+            <article class="card">
+              <h3>Language learners</h3>
+              <p>Working out <em>why</em> something is wrong is a great way to learn what's right. Every find is a tiny lesson.</p>
+            </article>
+            <article class="card">
+              <h3>Travellers</h3>
+              <p>Hotel signs, airport notices and translated menus are a goldmine. Capture them offline and keep the best as souvenirs.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Coming soon -->
+      <section class="section">
+        <div class="wrap soon">
+          <div>
+            <p class="kicker">Coming soon</p>
+            <h2>The typo map</h2>
+            <p>
+              Choose to share a find, and everyone will be able to see the typos spotted in your city. Only the words and
+              the city are shared, never your photo or exact location, and anyone can flag a post that shouldn't be there.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Privacy -->
+      <section id="privacy" class="section section-alt">
+        <div class="wrap">
+          <h2>Private by design</h2>
+          <ul class="privacy-list">
+            <li><strong>No account.</strong> Open it and start hunting.</li>
+            <li><strong>Your photos stay on your phone.</strong> Text reading happens on the device, too.</li>
+            <li><strong>No tracking.</strong> No ads, no analytics, and the app contacts no third parties.</li>
+            <li><strong>You decide what to share.</strong> Nothing leaves your phone unless you show a QR code or send a file.</li>
+          </ul>
+          <p><a href="/privacy.html">Read the privacy policy</a></p>
+        </div>
+      </section>
+
+      <!-- Final call to action -->
+      <section class="section final">
+        <div class="wrap">
+          <h2>Ready to start your museum?</h2>
+          <p>It's free, it works in your browser, and you can add it to your home screen like any other app.</p>
+          <a class="btn btn-yellow btn-big" href="/app/" data-open-app>Start hunting</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-row">
+        <p>© <span data-year>2026</span> Typo Hunter · MIT licence</p>
+        <nav aria-label="Footer">
+          <a href="/privacy.html">Privacy</a>
+          <a href="https://github.com/PrinceJoseph-software/typo-hunter" rel="noopener">Source code</a>
+          <a href="https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose" rel="noopener">Report a problem</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script type="module" src="../src/landing/landing.ts"></script>
   </body>
 </html>
