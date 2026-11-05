@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import jsQR from 'jsqr';
 import { pvpService, SpeedBlitzPayload } from '../utils/pvpService';
+import { ClassExpeditionPayload, StudentSubmissionPayload } from '../utils/teacherService';
 import { IconClose, IconCamera, IconAlert, IconCheck } from './Icons';
 
 interface BattleQrScannerModalProps {
@@ -27,6 +28,8 @@ interface BattleQrScannerModalProps {
     rank?: string;
     team?: string;
   }) => void;
+  onClassJoined?: (classPayload: ClassExpeditionPayload) => void;
+  onStudentSubmissionScanned?: (submission: StudentSubmissionPayload) => void;
 }
 
 export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
@@ -34,6 +37,8 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
   onClose,
   onBlitzJoined,
   onPassScanned,
+  onClassJoined,
+  onStudentSubmissionScanned,
 }) => {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -88,9 +93,41 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
       return true;
     }
 
-    // 2. Try parsing as generic Typo Hunter Pass
+    // 2. Try parsing as generic Typo Hunter Pass or Classroom Expedition
     try {
       const parsed = JSON.parse(decodedText);
+
+      // A. Classroom Master QR scanned by student
+      if (parsed && parsed.app === 'TYPO_HUNTER_CLASS' && parsed.action === 'JOIN_CLASS_EXPEDITION') {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([100, 50, 100]);
+        }
+        setFeedback(`Joined Class Hunt: ${parsed.className} (${parsed.instructorName})! Starting...`);
+        setTimeout(() => {
+          stopStream();
+          if (onClassJoined) {
+            onClassJoined(parsed as ClassExpeditionPayload);
+          }
+        }, 700);
+        return true;
+      }
+
+      // B. Student Assignment Submission scanned by teacher
+      if (parsed && parsed.app === 'TYPO_HUNTER_SUBMISSION' && parsed.action === 'SUBMIT_ASSIGNMENT') {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(200);
+        }
+        setFeedback(`Student submission received: ${parsed.studentName} (${parsed.points} pts)! Auditing...`);
+        setTimeout(() => {
+          stopStream();
+          if (onStudentSubmissionScanned) {
+            onStudentSubmissionScanned(parsed as StudentSubmissionPayload);
+          }
+        }, 600);
+        return true;
+      }
+
+      // C. Standard Curator Pass
       if (parsed && parsed.app === 'TYPO_HUNTER' && parsed.hunter) {
         if (onPassScanned) {
           setFeedback(`Retrieved Rival Info: ${parsed.hunter} (${parsed.points || 0} pts)! Battling...`);

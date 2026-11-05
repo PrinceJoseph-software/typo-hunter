@@ -1,7 +1,7 @@
 /**
  * @file pvpService.ts
  * @description Peer-to-Peer Multiplayer Battle Engine, Team Allocator,
- * and Time-Based Speed Hunt Tracker for TYPO HUNTER.
+ * Multi-Hunter Squad Battles, and Time-Based Speed Hunt Tracker for TYPO HUNTER.
  *
  * ARCHITECTURAL DESIGN:
  * Operates under the sovereign offline-first paradigm:
@@ -9,6 +9,8 @@
  *     using standardized Curatorial Point algorithms and optical Proof-of-Sighting hashes.
  *   - Squad / Guild Identity: Curators can enlist in competitive factions
  *     (Red Pen Syndicate, Sign Raiders, Syntax Squad, The Proofreaders).
+ *   - Multi-Curator Squad Battles: Pits 3v3, 3v2, 4v1 or N vs M teams together
+ *     via QR optical scans with Cumulative Total or Average Point handicap scoring.
  *   - Time-Based Hunt Mode: Tracks timed expeditions (5m / 15m / 30m) with live countdowns.
  *   - Immutable Battle Ledger: Past PvP matches, win rates, and streaks are logged
  *     into localStorage with cryptographic verification stamps.
@@ -85,6 +87,37 @@ export interface PvpMatchRecord {
   opponentTeam: string;
   opponentScore: number;
   outcome: 'VICTORY' | 'DEFEAT' | 'DRAW';
+  pointsDelta: number;
+  verificationHash: string;
+}
+
+export interface SquadMember {
+  id: string;
+  nickname: string;
+  teamTag: string;
+  teamName: string;
+  points: number;
+  specimens: number;
+  legends: number;
+  isHost?: boolean;
+}
+
+export interface SquadTeam {
+  id: 'alpha' | 'omega';
+  name: string;
+  members: SquadMember[];
+  totalPoints: number;
+  averagePoints: number;
+}
+
+export interface SquadBattleResult {
+  id: string;
+  timestamp: string;
+  winner: 'alpha' | 'omega' | 'DRAW';
+  winnerTeamName: string;
+  teamA: SquadTeam;
+  teamB: SquadTeam;
+  scoringMode: 'total' | 'average';
   pointsDelta: number;
   verificationHash: string;
 }
@@ -264,6 +297,7 @@ export const pvpService = {
     this.saveMatch(match);
     return match;
   },
+
   createSpeedBlitzPayload(
     hostName: string,
     durationMinutes: number,
@@ -304,5 +338,112 @@ export const pvpService = {
     } catch {
       return null;
     }
+  },
+
+  createSquadMember(data: Partial<SquadMember>): SquadMember {
+    const id = data.id || `member_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const team = data.teamTag 
+      ? PRESET_TEAMS.find(t => t.tag === data.teamTag) || PRESET_TEAMS[0]
+      : this.getCurrentTeam();
+    return {
+      id,
+      nickname: data.nickname || 'Hunter',
+      teamTag: team.tag,
+      teamName: team.name,
+      points: typeof data.points === 'number' ? data.points : 0,
+      specimens: typeof data.specimens === 'number' ? data.specimens : 0,
+      legends: typeof data.legends === 'number' ? data.legends : 0,
+      isHost: !!data.isHost,
+    };
+  },
+
+  calculateSquadStats(members: SquadMember[]): { totalPoints: number; averagePoints: number } {
+    const totalPoints = members.reduce((sum, m) => sum + (m.points || 0), 0);
+    const averagePoints = members.length > 0 ? Math.round(totalPoints / members.length) : 0;
+    return { totalPoints, averagePoints };
+  },
+
+  resolveSquadClash(
+    teamA: SquadTeam,
+    teamB: SquadTeam,
+    scoringMode: 'total' | 'average'
+  ): SquadBattleResult {
+    const scoreA = scoringMode === 'total' ? teamA.totalPoints : teamA.averagePoints;
+    const scoreB = scoringMode === 'total' ? teamB.totalPoints : teamB.averagePoints;
+    let winner: 'alpha' | 'omega' | 'DRAW' = 'DRAW';
+    let winnerTeamName = 'Honors Even (Draw)';
+
+    if (scoreA > scoreB) {
+      winner = 'alpha';
+      winnerTeamName = teamA.name;
+    } else if (scoreB > scoreA) {
+      winner = 'omega';
+      winnerTeamName = teamB.name;
+    }
+
+    const pointsDelta = scoreA - scoreB;
+    const timestamp = new Date().toISOString();
+    const verificationHash = `SQUAD-${scoringMode.toUpperCase()}-${Date.now().toString(36).toUpperCase()}-${Math.abs(pointsDelta)}`;
+
+    const result: SquadBattleResult = {
+      id: `squad_clash_${Date.now()}`,
+      timestamp,
+      winner,
+      winnerTeamName,
+      teamA,
+      teamB,
+      scoringMode,
+      pointsDelta,
+      verificationHash,
+    };
+
+    // Log to standard match history
+    const matchRecord: PvpMatchRecord = {
+      id: result.id,
+      timestamp,
+      battleType: 'quick_duel',
+      playerNickname: `${teamA.name} (${teamA.members.length} Hunters)`,
+      playerTeam: teamA.members[0]?.teamName || 'Allied Squad',
+      playerScore: scoreA,
+      playerSpecimens: teamA.members.reduce((sum, m) => sum + m.specimens, 0),
+      playerLegends: teamA.members.reduce((sum, m) => sum + m.legends, 0),
+      opponentName: `${teamB.name} (${teamB.members.length} Hunters)`,
+      opponentTeam: teamB.members[0]?.teamName || 'Rival Squad',
+      opponentScore: scoreB,
+      outcome: winner === 'alpha' ? 'VICTORY' : winner === 'omega' ? 'DEFEAT' : 'DRAW',
+      pointsDelta,
+      verificationHash,
+    };
+    this.saveMatch(matchRecord);
+
+    return result;
+  },
+
+  generateRandomSquadMember(teamTag?: string, baseScore?: number): SquadMember {
+    const randomFactions = PRESET_TEAMS;
+    const team = teamTag 
+      ? PRESET_TEAMS.find(t => t.tag === teamTag) || PRESET_TEAMS[0]
+      : randomFactions[Math.floor(Math.random() * randomFactions.length)];
+    
+    const rosterNames = [
+      'Cadet Orion', 'Analyst Mira', 'FieldScout Echo', 'Curator Knox',
+      'Proof-Major Chen', 'Syntax-Sergeant Leo', 'Linguist Maya', 'Archivist Blake'
+    ];
+    const nickname = rosterNames[Math.floor(Math.random() * rosterNames.length)];
+    const baseline = baseScore && baseScore > 0 ? baseScore : 500;
+    const variance = (Math.random() * 0.4) - 0.2; // +/- 20%
+    const points = Math.max(80, Math.round(baseline * (1 + variance)));
+    const specimens = Math.max(1, Math.round(points / 65));
+    const legends = Math.floor(Math.random() * Math.min(3, specimens));
+
+    return {
+      id: `member_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      nickname,
+      teamTag: team.tag,
+      teamName: team.name,
+      points,
+      specimens,
+      legends,
+    };
   },
 };

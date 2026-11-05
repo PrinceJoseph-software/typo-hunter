@@ -21,6 +21,9 @@ import {
   PRESET_TEAMS,
   PvpMatchRecord,
   SpeedBlitzPayload,
+  SquadMember,
+  SquadTeam,
+  SquadBattleResult,
 } from '../utils/pvpService';
 import { BattleQrScannerModal } from './BattleQrScannerModal';
 import { generatePvpVictoryCardBlob, shareOrDownloadBlob } from '../utils/shareCard';
@@ -35,6 +38,7 @@ import {
   IconQrCode,
   IconCamera,
   IconDownload,
+  IconTrash,
 } from './Icons';
 
 interface PvpArenaModalProps {
@@ -84,13 +88,42 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'blitz' | 'pass'>('blitz');
 
+  // Multi-Hunter Squad Battle State (Supports 3v3, 3v2, 4v1, N vs M)
+  const [squadTeamA, setSquadTeamA] = useState<SquadMember[]>([]);
+  const [squadTeamB, setSquadTeamB] = useState<SquadMember[]>([]);
+  const [squadScoringMode, setSquadScoringMode] = useState<'total' | 'average'>('average');
+  const [squadClashResult, setSquadClashResult] = useState<SquadBattleResult | null>(null);
+  const [scannerTargetTeam, setScannerTargetTeam] = useState<'teamA' | 'teamB' | null>(null);
+  const [squadSubTab, setSquadSubTab] = useState<'battle' | 'allegiance'>('battle');
+
   useEffect(() => {
     if (isOpen) {
-      setCurrentTeam(pvpService.getCurrentTeam());
+      const activeTeam = pvpService.getCurrentTeam();
+      setCurrentTeam(activeTeam);
       setHistory(pvpService.getMatchHistory());
       setStats(pvpService.getPvpStats());
+
+      // Initialize Squad Team A with host player
+      setSquadTeamA([
+        pvpService.createSquadMember({
+          nickname: nickname || 'Hunter',
+          points: totalPoints,
+          specimens: specimenCount,
+          legends: legendCount,
+          teamTag: activeTeam.tag,
+          isHost: true,
+        }),
+      ]);
+
+      // Initialize Squad Team B with rival squad scouts
+      const rivalFaction = PRESET_TEAMS.find(t => t.id !== activeTeam.id) || PRESET_TEAMS[1];
+      setSquadTeamB([
+        pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints),
+        pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints),
+      ]);
+      setSquadClashResult(null);
     }
-  }, [isOpen]);
+  }, [isOpen, nickname, totalPoints, specimenCount, legendCount]);
 
   // Generate Speed Blitz QR for host
   const handleGenerateBlitzQr = (duration: 3 | 5 | 10) => {
@@ -141,6 +174,58 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     });
   };
 
+  const handleAddSquadMember = (team: 'A' | 'B') => {
+    if (team === 'A') {
+      const newMember = pvpService.generateRandomSquadMember(currentTeam.tag, totalPoints);
+      setSquadTeamA(prev => [...prev, newMember]);
+    } else {
+      const rivalFaction = PRESET_TEAMS.find(t => t.id !== currentTeam.id) || PRESET_TEAMS[1];
+      const newMember = pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints);
+      setSquadTeamB(prev => [...prev, newMember]);
+    }
+  };
+
+  const handleScanSquadMember = (team: 'A' | 'B') => {
+    setScannerTargetTeam(team === 'A' ? 'teamA' : 'teamB');
+    setScannerMode('pass');
+    setShowQrScanner(true);
+  };
+
+  const handleRemoveSquadMember = (team: 'A' | 'B', id: string) => {
+    if (team === 'A') {
+      setSquadTeamA(prev => prev.filter(m => m.id !== id || m.isHost));
+    } else {
+      setSquadTeamB(prev => prev.filter(m => m.id !== id));
+    }
+  };
+
+  const handleExecuteSquadClash = () => {
+    const statsA = pvpService.calculateSquadStats(squadTeamA);
+    const statsB = pvpService.calculateSquadStats(squadTeamB);
+
+    const teamA: SquadTeam = {
+      id: 'alpha',
+      name: `[${currentTeam.tag}] ${currentTeam.name}`,
+      members: squadTeamA,
+      totalPoints: statsA.totalPoints,
+      averagePoints: statsA.averagePoints,
+    };
+
+    const rivalFaction = squadTeamB[0]?.teamTag || 'RIV';
+    const teamB: SquadTeam = {
+      id: 'omega',
+      name: `[${rivalFaction}] Rival Coalition`,
+      members: squadTeamB,
+      totalPoints: statsB.totalPoints,
+      averagePoints: statsB.averagePoints,
+    };
+
+    const result = pvpService.resolveSquadClash(teamA, teamB, squadScoringMode);
+    setSquadClashResult(result);
+    setHistory(pvpService.getMatchHistory());
+    setStats(pvpService.getPvpStats());
+  };
+
   const handlePassScanned = (passData: {
     hunter: string;
     points: number;
@@ -150,6 +235,37 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     team?: string;
   }) => {
     setShowQrScanner(false);
+
+    // If scanning for Multi-Hunter Squad Clash:
+    if (scannerTargetTeam === 'teamA') {
+      const newMember = pvpService.createSquadMember({
+        nickname: passData.hunter,
+        points: passData.points,
+        specimens: passData.specimens,
+        legends: passData.legends,
+        teamTag: (passData.team ? passData.team.slice(0, 4) : currentTeam.tag).toUpperCase(),
+      });
+      setSquadTeamA(prev => [...prev, newMember]);
+      setScannerTargetTeam(null);
+      setActiveTab('team');
+      return;
+    }
+
+    if (scannerTargetTeam === 'teamB') {
+      const newMember = pvpService.createSquadMember({
+        nickname: passData.hunter,
+        points: passData.points,
+        specimens: passData.specimens,
+        legends: passData.legends,
+        teamTag: (passData.team ? passData.team.slice(0, 4) : 'RIV').toUpperCase(),
+      });
+      setSquadTeamB(prev => [...prev, newMember]);
+      setScannerTargetTeam(null);
+      setActiveTab('team');
+      return;
+    }
+
+    // Default 1v1 Quick Duel handling:
     setActiveTab('duel');
     setCustomOpponentName(passData.hunter);
     setCustomOpponentScore(String(passData.points));
@@ -626,66 +742,317 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
               </div>
             )}
 
-            {/* TAB 3: CURATOR TEAM */}
+            {/* TAB 3: MULTI-HUNTER SQUAD CLASH & FACTIONS */}
             {activeTab === 'team' && (
-              <div className="space-y-3">
-                <div className="bg-white border-2 border-black rounded-xl p-3 mb-2 font-mono text-xs">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase block mb-1">
-                    Active Allegiance:
-                  </span>
-                  <p className="font-extrabold text-sm text-black">
-                    [{currentTeam.tag}] {currentTeam.name}
-                  </p>
-                  <p className="text-[11px] text-gray-600 mt-0.5 italic">{currentTeam.motto}</p>
+              <div className="space-y-3 font-mono text-xs">
+                {/* Sub-Tab Navigation */}
+                <div className="flex bg-white border border-black rounded-lg p-0.5 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSquadSubTab('battle')}
+                    className={`flex-1 py-1.5 px-2 rounded-md font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-colors flex items-center justify-center gap-1 ${
+                      squadSubTab === 'battle' ? 'bg-[#D66A4A] text-white shadow-xs' : 'text-gray-600 hover:text-black'
+                    }`}
+                  >
+                    <IconSwords size={12} />
+                    <span>Squad Clash ({squadTeamA.length}v{squadTeamB.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSquadSubTab('allegiance')}
+                    className={`flex-1 py-1.5 px-2 rounded-md font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-colors flex items-center justify-center gap-1 ${
+                      squadSubTab === 'allegiance' ? 'bg-black text-[#E8B92D] shadow-xs' : 'text-gray-600 hover:text-black'
+                    }`}
+                  >
+                    <IconUsers size={12} />
+                    <span>Faction Allegiance</span>
+                  </button>
                 </div>
 
-                {/* Squad List with No Cutoff */}
-                <div className="space-y-2.5 px-1 py-1">
-                  {PRESET_TEAMS.map((team) => {
-                    const isSelected = currentTeam.id === team.id;
-                    return (
-                      <div
-                        key={team.id}
-                        onClick={() => handleSelectTeam(team)}
-                        className={`p-3 sm:p-3.5 rounded-2xl border-2 border-black cursor-pointer transition-all flex items-center justify-between box-border ${
-                          isSelected
-                            ? 'bg-[#FFF9EC] shadow-brutal'
-                            : 'bg-white hover:bg-[#FAF6EE] shadow-brutal-sm'
-                        }`}
-                      >
-                        <div className="pr-2 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span
-                              className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-black uppercase flex-shrink-0"
-                              style={{ backgroundColor: team.badgeBg, color: team.badgeText }}
-                            >
-                              {team.tag}
-                            </span>
-                            <h4 className="font-heading font-extrabold text-sm text-black truncate">
-                              {team.name}
-                            </h4>
-                            {isSelected && (
-                              <span className="text-[8px] font-mono font-bold uppercase bg-[#E8B92D] text-black px-1.5 py-0.2 rounded border border-black flex-shrink-0">
-                                ACTIVE SQUAD
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] font-mono text-gray-600 mt-1 line-clamp-2">{team.motto}</p>
+                {squadSubTab === 'battle' ? (
+                  /* SUB-VIEW 1: MULTI-HUNTER SQUAD BATTLE ARENA (3v3, 3v2, 4v1) */
+                  <div className="space-y-3">
+                    {/* Scoring Mode Toggle */}
+                    <div className="bg-white border-2 border-black rounded-xl p-2.5 space-y-1.5 shadow-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold uppercase text-gray-500">
+                          Handicap & Scoring Rule:
+                        </span>
+                        <span className="text-[9px] font-bold text-[#D66A4A]">
+                          {squadScoringMode === 'average' ? 'FAIR HANDICAP ACTIVE' : 'UNSCALED SUM'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSquadScoringMode('average')}
+                          className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer border ${
+                            squadScoringMode === 'average'
+                              ? 'bg-[#82917B] text-white border-black shadow-xs'
+                              : 'bg-gray-50 text-gray-600 border-gray-300'
+                          }`}
+                        >
+                          Squad Average (3v2 Fair)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSquadScoringMode('total')}
+                          className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer border ${
+                            squadScoringMode === 'total'
+                              ? 'bg-black text-[#E8B92D] border-black shadow-xs'
+                              : 'bg-gray-50 text-gray-600 border-gray-300'
+                          }`}
+                        >
+                          Cumulative Total (Sum)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Team Alpha vs Team Omega Head-to-Head */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* TEAM ALPHA (ALLIED SQUAD) */}
+                      <div className="bg-[#FFFDF9] p-3 rounded-2xl border-2 border-black shadow-brutal-sm space-y-2">
+                        <div className="flex justify-between items-center border-b border-black/10 pb-1.5">
+                          <span
+                            className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border border-black"
+                            style={{ backgroundColor: currentTeam.badgeBg, color: currentTeam.badgeText }}
+                          >
+                            [{currentTeam.tag}] Team Alpha
+                          </span>
+                          <span className="text-[10px] font-bold text-black">
+                            {squadTeamA.length} {squadTeamA.length === 1 ? 'Hunter' : 'Hunters'}
+                          </span>
                         </div>
 
-                        <div className="flex-shrink-0 ml-2">
-                          {isSelected ? (
-                            <span className="w-6 h-6 rounded-full bg-black text-[#E8B92D] border border-black flex items-center justify-center shadow-xs">
-                              <IconCheck size={12} />
-                            </span>
-                          ) : (
-                            <span className="w-6 h-6 rounded-full border-2 border-gray-300 bg-white block" />
-                          )}
+                        {/* Member Roster */}
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {squadTeamA.map((member) => (
+                            <div
+                              key={member.id}
+                              className="bg-[#FAF6EE] p-1.5 rounded-lg border border-black/15 flex justify-between items-center text-[11px]"
+                            >
+                              <div className="truncate mr-1">
+                                <span className="font-bold text-black">{member.nickname}</span>
+                                {member.isHost && (
+                                  <span className="text-[8px] ml-1 bg-black text-[#E8B92D] px-1 rounded font-bold">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="font-bold text-[#D66A4A]">{member.points} pts</span>
+                                {!member.isHost && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveSquadMember('A', member.id)}
+                                    className="text-gray-400 hover:text-black cursor-pointer"
+                                    aria-label="Remove teammate"
+                                  >
+                                    <IconTrash size={10} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Team A Stats */}
+                        <div className="pt-1 border-t border-black/10 flex justify-between text-[10px] text-gray-600 font-bold">
+                          <span>Total: {pvpService.calculateSquadStats(squadTeamA).totalPoints} pts</span>
+                          <span className="text-black">
+                            Avg: {pvpService.calculateSquadStats(squadTeamA).averagePoints} pts
+                          </span>
+                        </div>
+
+                        {/* Add Teammate Actions */}
+                        <div className="grid grid-cols-2 gap-1 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleScanSquadMember('A')}
+                            className="btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <IconCamera size={10} />
+                            <span>Scan QR Pass</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddSquadMember('A')}
+                            className="btn-secondary py-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                          >
+                            + Add Scout
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* TEAM OMEGA (RIVAL SQUAD) */}
+                      <div className="bg-[#FFFDF9] p-3 rounded-2xl border-2 border-black shadow-brutal-sm space-y-2">
+                        <div className="flex justify-between items-center border-b border-black/10 pb-1.5">
+                          <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border border-black bg-[#282722] text-[#E8B92D]">
+                            [{squadTeamB[0]?.teamTag || 'RIV'}] Team Omega
+                          </span>
+                          <span className="text-[10px] font-bold text-black">
+                            {squadTeamB.length} {squadTeamB.length === 1 ? 'Hunter' : 'Hunters'}
+                          </span>
+                        </div>
+
+                        {/* Member Roster */}
+                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {squadTeamB.map((member) => (
+                            <div
+                              key={member.id}
+                              className="bg-[#FAF6EE] p-1.5 rounded-lg border border-black/15 flex justify-between items-center text-[11px]"
+                            >
+                              <div className="truncate mr-1">
+                                <span className="font-bold text-black">{member.nickname}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="font-bold text-black">{member.points} pts</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSquadMember('B', member.id)}
+                                  className="text-gray-400 hover:text-black cursor-pointer"
+                                  aria-label="Remove rival"
+                                >
+                                  <IconTrash size={10} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Team B Stats */}
+                        <div className="pt-1 border-t border-black/10 flex justify-between text-[10px] text-gray-600 font-bold">
+                          <span>Total: {pvpService.calculateSquadStats(squadTeamB).totalPoints} pts</span>
+                          <span className="text-black">
+                            Avg: {pvpService.calculateSquadStats(squadTeamB).averagePoints} pts
+                          </span>
+                        </div>
+
+                        {/* Add Rival Actions */}
+                        <div className="grid grid-cols-2 gap-1 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleScanSquadMember('B')}
+                            className="btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <IconCamera size={10} />
+                            <span>Scan QR Pass</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddSquadMember('B')}
+                            className="btn-secondary py-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
+                          >
+                            + Add Rival
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clash Verdict Banner */}
+                    {squadClashResult && (
+                      <div
+                        className={`p-3.5 rounded-2xl border-2 border-black text-center space-y-1.5 shadow-brutal-sm ${
+                          squadClashResult.winner === 'alpha'
+                            ? 'bg-[#EBF3E8] text-[#2D5A27]'
+                            : squadClashResult.winner === 'omega'
+                            ? 'bg-[#FDF2F0] text-[#D66A4A]'
+                            : 'bg-[#FFF9EC] text-black'
+                        }`}
+                      >
+                        <div className="font-heading font-extrabold text-base">
+                          {squadClashResult.winner === 'alpha' && 'VICTORY! ALLIED SQUAD TRIUMPH'}
+                          {squadClashResult.winner === 'omega' && 'DEFEAT! RIVAL SQUAD PREVAILED'}
+                          {squadClashResult.winner === 'DRAW' && 'HONORS EVEN! SQUAD TIE'}
+                        </div>
+                        <p className="text-xs font-bold">
+                          {squadClashResult.winner === 'alpha'
+                            ? `Team Alpha won by +${Math.abs(squadClashResult.pointsDelta)} pts using ${
+                                squadClashResult.scoringMode === 'average' ? 'Squad Average' : 'Total Points'
+                              }!`
+                            : squadClashResult.winner === 'omega'
+                            ? `Team Omega led by +${Math.abs(squadClashResult.pointsDelta)} pts.`
+                            : `Exact tie across ${squadTeamA.length} vs ${squadTeamB.length} hunters!`}
+                        </p>
+                        <span className="text-[9px] text-gray-500 block">
+                          Ledger Hash: <code>{squadClashResult.verificationHash}</code>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Execute Squad Battle Button */}
+                    <button
+                      type="button"
+                      onClick={handleExecuteSquadClash}
+                      className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal flex items-center justify-center gap-2"
+                    >
+                      <IconSwords size={16} />
+                      <span>
+                        Battle Squads ({squadTeamA.length} vs {squadTeamB.length} Clash)
+                      </span>
+                    </button>
+                  </div>
+                ) : (
+                  /* SUB-VIEW 2: SQUAD ALLEGIANCE SELECTOR */
+                  <div className="space-y-2.5">
+                    <div className="bg-white border-2 border-black rounded-xl p-3 font-mono text-xs">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                        Active Allegiance:
+                      </span>
+                      <p className="font-extrabold text-sm text-black">
+                        [{currentTeam.tag}] {currentTeam.name}
+                      </p>
+                      <p className="text-[11px] text-gray-600 mt-0.5 italic">{currentTeam.motto}</p>
+                    </div>
+
+                    <div className="space-y-2 px-0.5">
+                      {PRESET_TEAMS.map((team) => {
+                        const isSelected = currentTeam.id === team.id;
+                        return (
+                          <div
+                            key={team.id}
+                            onClick={() => handleSelectTeam(team)}
+                            className={`p-3 rounded-2xl border-2 border-black cursor-pointer transition-all flex items-center justify-between box-border ${
+                              isSelected
+                                ? 'bg-[#FFF9EC] shadow-brutal'
+                                : 'bg-white hover:bg-[#FAF6EE] shadow-brutal-sm'
+                            }`}
+                          >
+                            <div className="pr-2 flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-black uppercase flex-shrink-0"
+                                  style={{ backgroundColor: team.badgeBg, color: team.badgeText }}
+                                >
+                                  {team.tag}
+                                </span>
+                                <h4 className="font-heading font-extrabold text-sm text-black truncate">
+                                  {team.name}
+                                </h4>
+                                {isSelected && (
+                                  <span className="text-[8px] font-mono font-bold uppercase bg-[#E8B92D] text-black px-1.5 py-0.2 rounded border border-black flex-shrink-0">
+                                    ACTIVE SQUAD
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-mono text-gray-600 mt-1 line-clamp-2">{team.motto}</p>
+                            </div>
+
+                            <div className="flex-shrink-0 ml-2">
+                              {isSelected ? (
+                                <span className="w-6 h-6 rounded-full bg-black text-[#E8B92D] border border-black flex items-center justify-center shadow-xs">
+                                  <IconCheck size={12} />
+                                </span>
+                              ) : (
+                                <span className="w-6 h-6 rounded-full border-2 border-gray-300 bg-white block" />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

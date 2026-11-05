@@ -10,7 +10,7 @@
 import React from 'react';
 import { Discovery } from '../db/database';
 import { ROTATING_PROMPTS } from '../utils/constants';
-import { IconCamera, IconTrophy, IconSwords } from '../components/Icons';
+import { IconCamera, IconTrophy, IconSwords, IconGraduationCap } from '../components/Icons';
 
 interface HomeProps {
   discoveries: Discovery[];
@@ -19,6 +19,7 @@ interface HomeProps {
   onResetSample?: () => void;
   onOpenHelp?: () => void;
   onOpenPvp?: () => void;
+  onOpenTeacherMode?: () => void;
 }
 
 function getGreeting(nickname: string): string {
@@ -29,7 +30,15 @@ function getGreeting(nickname: string): string {
   return `Good evening, ${name}.`;
 }
 
-export const Home: React.FC<HomeProps> = ({ discoveries, nickname, onNavigate, onResetSample, onOpenHelp, onOpenPvp }) => {
+export const Home: React.FC<HomeProps> = ({
+  discoveries,
+  nickname,
+  onNavigate,
+  onResetSample,
+  onOpenHelp,
+  onOpenPvp,
+  onOpenTeacherMode,
+}) => {
   const latest = discoveries[0];
   const recentList = discoveries.slice(1, 4);
 
@@ -151,6 +160,37 @@ export const Home: React.FC<HomeProps> = ({ discoveries, nickname, onNavigate, o
               className="btn-primary py-2.5 px-3.5 rounded-xl text-xs font-extrabold uppercase tracking-wider flex-shrink-0 cursor-pointer shadow-brutal-sm"
             >
               Enter Arena
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Classroom Expedition & Teacher Mode Banner */}
+      {onOpenTeacherMode && (
+        <section className="mb-6" aria-label="Classroom and Teacher Terminal">
+          <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] border-2 border-black shadow-brutal-sm flex items-center justify-between">
+            <div className="pr-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase">
+                  Classroom Suite
+                </span>
+                <span className="text-[10px] font-mono font-bold text-gray-500">
+                  Academic Overseer
+                </span>
+              </div>
+              <h3 className="font-heading font-extrabold text-base text-black flex items-center gap-1.5">
+                <IconGraduationCap size={16} className="text-[#D66A4A]" />
+                Teacher Terminal & Class Expeditions
+              </h3>
+              <p className="text-[11px] font-mono text-gray-600 mt-0.5">
+                Launch synchronized class hunts via Master QR, inspect student systems, and export gradebooks
+              </p>
+            </div>
+            <button
+              onClick={onOpenTeacherMode}
+              className="btn-secondary py-2.5 px-3 rounded-xl text-xs font-extrabold uppercase tracking-wider flex-shrink-0 cursor-pointer shadow-brutal-sm flex items-center gap-1"
+            >
+              <span>Teacher Mode</span>
             </button>
           </div>
         </section>
