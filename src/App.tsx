@@ -22,13 +22,15 @@ import { Detail } from './screens/Detail';
 import { HallOfFame } from './screens/HallOfFame';
 import { Profile } from './screens/Profile';
 import { NotFound } from './screens/NotFound';
-import { IconHome, IconGrid, IconAward, IconUser, IconFlame, IconClose } from './components/Icons';
+import { IconHome, IconGrid, IconAward, IconUser, IconFlame, IconClose, IconGraduationCap } from './components/Icons';
 import { recordCuratorActivity, syncFaviconWithInactivity } from './utils/dynamicFavicon';
 import { checkInactivityNotification } from './utils/notificationService';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpModal } from './components/HelpModal';
 import { PrivacyModal } from './components/PrivacyModal';
 import { PvpArenaModal } from './components/PvpArenaModal';
+import { TeacherModeModal } from './components/TeacherModeModal';
+import { teacherService, ClassExpedition } from './utils/teacherService';
 
 export function App() {
   const [currentView, setCurrentView] = useState<string>('home');
@@ -41,6 +43,10 @@ export function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showPvpArena, setShowPvpArena] = useState(false);
+  const [showTeacherMode, setShowTeacherMode] = useState(false);
+  const [activeClassExpedition, setActiveClassExpedition] = useState<ClassExpedition | null>(() =>
+    teacherService.getActiveClassExpedition()
+  );
   const [activeSpeedBlitz, setActiveSpeedBlitz] = useState<ActiveSpeedBlitzSession | null>(null);
   const [blitzVerdict, setBlitzVerdict] = useState<PvpMatchRecord | null>(null);
   const [sharingPlacard, setSharingPlacard] = useState(false);
@@ -240,6 +246,49 @@ export function App() {
           </div>
         )}
 
+        {/* Active Classroom Expedition HUD Banner */}
+        {activeClassExpedition && (
+          <div className="mx-4 mt-3 bg-[#282722] text-white border-2 border-black p-3.5 rounded-2xl shadow-brutal flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-[#D66A4A] text-white border border-white/30 flex items-center justify-center flex-shrink-0">
+                <IconGraduationCap size={16} />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#E8B92D] block truncate">
+                  Class Assignment Active · {activeClassExpedition.instructorName}
+                </span>
+                <p className="text-xs font-mono font-bold text-white truncate">
+                  {activeClassExpedition.className}
+                </p>
+                <p className="text-[10px] font-mono text-gray-300 truncate">
+                  Target: {activeClassExpedition.targetPoints} pts · {activeClassExpedition.objective}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTeacherMode(true)}
+                className="btn-secondary py-1 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Inspect
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  teacherService.clearActiveClassExpedition();
+                  setActiveClassExpedition(null);
+                }}
+                className="w-6 h-6 rounded-full border border-white/20 bg-black/40 text-gray-400 hover:text-white flex items-center justify-center cursor-pointer"
+                title="Leave class hunt"
+                aria-label="Leave class hunt"
+              >
+                <IconClose size={10} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Main Content Area */}
         <main className="flex-1 w-full" role="main">
           {currentView === 'home' && (
@@ -250,6 +299,7 @@ export function App() {
               onResetSample={handleResetSample}
               onOpenHelp={() => setShowHelp(true)}
               onOpenPvp={() => setShowPvpArena(true)}
+              onOpenTeacherMode={() => setShowTeacherMode(true)}
             />
           )}
           {currentView === 'capture' && (
@@ -261,6 +311,7 @@ export function App() {
                 }
               }}
               activeBlitz={activeSpeedBlitz}
+              activeClassExpedition={activeClassExpedition}
               onFinishBlitz={handleFinishBlitz}
               onAddBlitzPoints={handleAddBlitzPoints}
             />
@@ -315,6 +366,7 @@ export function App() {
               onResetSample={handleResetSample}
               onOpenHelp={() => setShowHelp(true)}
               onOpenPvp={() => setShowPvpArena(true)}
+              onOpenTeacherMode={() => setShowTeacherMode(true)}
               canInstall={!!deferredPrompt}
               isInstalled={isInstalled}
               onInstall={handleInstallApp}
@@ -349,6 +401,18 @@ export function App() {
           nickname={nickname}
           discoveries={discoveries}
           onStartSpeedBlitz={handleStartSpeedBlitz}
+        />
+
+        {/* Academic Terminal & Teacher Mode Modal */}
+        <TeacherModeModal
+          isOpen={showTeacherMode}
+          onClose={() => setShowTeacherMode(false)}
+          nickname={nickname}
+          discoveries={discoveries}
+          onClassStarted={(expedition) => {
+            setActiveClassExpedition(expedition);
+            setCurrentView('capture');
+          }}
         />
 
         {/* Speed Blitz Battle Verdict Dialog */}

@@ -17,7 +17,8 @@ import { CATEGORIES } from '../utils/constants';
 import { compressImage } from '../utils/imageUtils';
 import { dbService, Discovery } from '../db/database';
 import { runOfflineOCR, OCRResult } from '../utils/ocrService';
-import { IconCamera, IconClose, IconRefresh, IconBolt, IconAlert, IconChevronDown } from '../components/Icons';
+import { IconCamera, IconClose, IconRefresh, IconBolt, IconAlert, IconChevronDown, IconGraduationCap } from '../components/Icons';
+import { ClassExpedition } from '../utils/teacherService';
 
 export interface ActiveSpeedBlitzSession {
   battleId: string;
@@ -33,11 +34,18 @@ export interface ActiveSpeedBlitzSession {
 interface CaptureProps {
   onSaveComplete: () => void;
   activeBlitz?: ActiveSpeedBlitzSession | null;
+  activeClassExpedition?: ClassExpedition | null;
   onFinishBlitz?: (earnedScore: number) => void;
   onAddBlitzPoints?: (pts: number) => void;
 }
 
-export const Capture: React.FC<CaptureProps> = ({ onSaveComplete, activeBlitz, onFinishBlitz, onAddBlitzPoints }) => {
+export const Capture: React.FC<CaptureProps> = ({
+  onSaveComplete,
+  activeBlitz,
+  activeClassExpedition,
+  onFinishBlitz,
+  onAddBlitzPoints,
+}) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [title, setTitle] = useState('');
@@ -231,6 +239,27 @@ export const Capture: React.FC<CaptureProps> = ({ onSaveComplete, activeBlitz, o
 
   return (
     <div className="pb-32 px-4 pt-6 max-w-xl mx-auto">
+      {/* Active Classroom Expedition Assignment Header */}
+      {activeClassExpedition && !activeBlitz && (
+        <div className="editorial-card p-4 rounded-2xl bg-[#282722] text-white border-2 border-black shadow-brutal mb-6 box-border">
+          <div className="flex justify-between items-center mb-1 flex-wrap gap-1">
+            <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-[#E8B92D]">
+              <IconGraduationCap size={14} className="text-[#E8B92D]" />
+              Class Field Assignment
+            </span>
+            <span className="text-xs font-mono font-extrabold text-[#E8B92D] bg-black/40 px-2 py-0.5 rounded border border-white/20">
+              Instructor: {activeClassExpedition.instructorName}
+            </span>
+          </div>
+          <h3 className="font-heading font-extrabold text-base text-white mt-1">
+            {activeClassExpedition.className}
+          </h3>
+          <p className="text-[11px] font-mono text-gray-300 mt-0.5">
+            Objective: {activeClassExpedition.objective} (Target: {activeClassExpedition.targetPoints} pts)
+          </p>
+        </div>
+      )}
+
       {/* Active Speed Blitz Battle Header */}
       {activeBlitz && (
         <div className="editorial-card p-4 rounded-2xl bg-[#282722] text-white border-2 border-black shadow-brutal mb-6 box-border">

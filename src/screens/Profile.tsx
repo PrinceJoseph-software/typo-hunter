@@ -27,6 +27,7 @@ import {
   IconRefresh,
   IconSwords,
   IconCamera,
+  IconGraduationCap,
 } from '../components/Icons';
 import { CuratorPassModal } from '../components/CuratorPassModal';
 import { PrivacyModal } from '../components/PrivacyModal';
@@ -42,6 +43,7 @@ interface ProfileProps {
   onResetSample?: () => void;
   onOpenHelp?: () => void;
   onOpenPvp?: () => void;
+  onOpenTeacherMode?: () => void;
   canInstall?: boolean;
   isInstalled?: boolean;
   onInstall?: () => void;
@@ -55,6 +57,7 @@ export const Profile: React.FC<ProfileProps> = ({
   onResetSample, 
   onOpenHelp,
   onOpenPvp,
+  onOpenTeacherMode,
   canInstall,
   isInstalled,
   onInstall,
@@ -305,7 +308,7 @@ export const Profile: React.FC<ProfileProps> = ({
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => setShowPass(true)}
             className="flex-1 btn-primary py-2.5 px-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer text-center"
@@ -318,7 +321,16 @@ export const Profile: React.FC<ProfileProps> = ({
               className="flex-1 btn-secondary py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer text-center flex items-center justify-center gap-1.5"
             >
               <IconSwords size={13} className="text-[#D66A4A]" />
-              <span>PvP Arena & Squads</span>
+              <span>PvP & Squads</span>
+            </button>
+          )}
+          {onOpenTeacherMode && (
+            <button
+              onClick={onOpenTeacherMode}
+              className="flex-1 btn-secondary py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer text-center flex items-center justify-center gap-1.5"
+            >
+              <IconGraduationCap size={14} className="text-[#D66A4A]" />
+              <span>Teacher Mode</span>
             </button>
           )}
         </div>
