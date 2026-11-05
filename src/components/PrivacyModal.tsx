@@ -169,7 +169,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
                 rel="noopener noreferrer"
                 className="btn-secondary py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase"
               >
-                Full policy online ↗
+                Full policy page ↗
               </a>
             </div>
           </Section>

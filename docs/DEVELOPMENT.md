@@ -89,6 +89,20 @@ pnpm build               # type check + production build
 
 There are no unit or end-to-end tests yet.
 
+## Search, sharing and AI-readable files
+
+| File | Purpose |
+|---|---|
+| `public/index.html` | Title, description, canonical URL, Open Graph / Twitter preview tags, `WebApplication` structured data (JSON-LD), and a `<noscript>` summary for crawlers that don't run JavaScript |
+| `public/og-image.png` | 1200×630 link-preview image |
+| `public/robots.txt`, `public/sitemap.xml` | Crawling rules and page list |
+| `public/llms.txt`, `public/llms-full.txt` | Plain-text summaries for AI assistants ([llmstxt.org](https://llmstxt.org/) format) |
+| `/privacy.html` | Generated from `PRIVACY.md` on every build (`scripts/privacy-page.ts`) |
+
+**Changing the domain?** Update the address in `public/index.html`, `public/robots.txt`, `public/sitemap.xml`, `public/llms.txt`, `public/llms-full.txt` and `SITE_URL` in `vite.config.ts`.
+
+**Security headers** (`vercel.json`): Content-Security-Policy (only the app's own scripts, styles, fonts and images; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, a strict referrer policy, and a permissions policy that allows only the camera. If you add any external service, the CSP and `PRIVACY.md` must both be updated.
+
 ## Deployment
 
 The app is a static site. `pnpm build` outputs `dist/`. Serve it from any static host with a fallback to `index.html`.

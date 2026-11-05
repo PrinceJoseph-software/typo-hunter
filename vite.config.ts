@@ -3,6 +3,27 @@ import react from '@vitejs/plugin-react';
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { buildPrivacyPage } from './scripts/privacy-page';
+
+/** Public address of the deployed app (used for canonical links in generated pages). */
+const SITE_URL = 'https://typo-hunter-topaz.vercel.app/';
+
+/** Generates /privacy.html from PRIVACY.md so the public page always matches the policy. */
+function typoHunterPrivacyPage(): Plugin {
+  const render = () => buildPrivacyPage(readFileSync(resolve(__dirname, 'PRIVACY.md'), 'utf8'), SITE_URL);
+  return {
+    name: 'typo-hunter-privacy-page',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'privacy.html', source: render() });
+    },
+    configureServer(server) {
+      server.middlewares.use('/privacy.html', (_req, res) => {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(render());
+      });
+    },
+  };
+}
 
 /**
  * After the build, writes the full list of output files and a content-based
@@ -45,7 +66,7 @@ function typoHunterPrecache(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), typoHunterPrecache()],
+  plugins: [react(), typoHunterPrivacyPage(), typoHunterPrecache()],
   // index.html lives in public/; publicDir holds static assets like manifest.json, sw.js, icons
   root: 'public',
   publicDir: '../public',

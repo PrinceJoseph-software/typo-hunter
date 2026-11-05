@@ -36,7 +36,8 @@ export const ROTATING_PROMPTS = [
 export const PROJECT_LINKS = {
   repo: 'https://github.com/PrinceJoseph-software/typo-hunter',
   reportProblem: 'https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose',
-  privacyPolicy: 'https://github.com/PrinceJoseph-software/typo-hunter/blob/main/PRIVACY.md',
+  /** Standalone page generated from PRIVACY.md at build time; precached, so it works offline. */
+  privacyPolicy: '/privacy.html',
 } as const;
 
 /** Date of the current privacy policy (keep in sync with PRIVACY.md). */

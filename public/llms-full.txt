@@ -1,0 +1,111 @@
+# Typo Hunter (full description)
+
+> The world is full of typos. Someone has to collect them.
+
+Typo Hunter is a free, open-source (MIT) Progressive Web App at https://typo-hunter-topaz.vercel.app/ for photographing and collecting language mistakes found in the real world: menus offering "Soap of the Day", signs that went badly wrong, rogue apostrophes on price tags, and machine translations that gave up. It runs in any modern browser, installs to the home screen, works offline after the first visit, needs no account, and keeps all data on the user's device.
+
+## Core loop
+
+1. Spot a typo and tap the yellow "+" (Spot) button.
+2. Take a photo (or pick one from the gallery), add a title and a category.
+3. Record "What it actually said" and "What they meant" (for example "Coffe and Trea" → "Coffee and Tea"), plus an optional location and notes.
+4. Save ("Archive Specimen"). The find joins the user's Archive.
+
+Categories: Food and Drink, Business Signs, Transport, Advertising, Menus, Handwritten Signs, Translation Mishaps, Other.
+
+## The museum
+
+- Archive: every find, with search, category filters, grid or list view, newest/oldest sorting and favourites.
+- Legends (Hall of Fame): the user rates finds 1–5 stars and adds favourites to a personal Hall of Fame. These are personal picks and do not earn points.
+- Share cards: any find can be exported as an image card for chats and social media.
+- Mascot: the browser-tab icon becomes worried after a day without a new find and melts after three days; spotting a typo restores it.
+
+## Points
+
+Each find earns up to 120 points for how completely it is documented:
+
+- Photo: +50
+- What they meant (the correction): +30
+- Category: +20 (or +10 for "Other")
+- Location: +10
+- Notes: +10
+
+Rules:
+
+- Points are locked in when earned; deleting a photo later never removes them.
+- Re-using the same (or a near-identical) photo earns nothing, even after the original is deleted.
+- Entries imported from someone else's backup earn nothing.
+- Star ratings and Hall of Fame status earn nothing.
+
+## Playing with friends (offline, by QR code)
+
+- Curator Pass: a QR code with the player's name, squad, rank and points.
+- Quick Duel: scan a friend's pass and compare points.
+- Speed Blitz: a timed round of 3, 5 or 10 minutes. One player hosts with a QR code and the other scans it. Both start at 0, and only photos taken during the round count. At the end each player scans the other's result code, so both phones show the same winner.
+- Squad battles: team against team. Every player joins by scanning their own pass. One side needs at least three players (3v3, 3v2, 3v1…). Uneven teams are scored by average.
+- Squads (factions): Red Pen Syndicate, Sign Raiders, Syntax Squad, The Proofreaders.
+
+Scores shared by QR code work on the honour system.
+
+## Classroom use (Teacher Mode)
+
+Teachers:
+
+1. Start a class hunt (class name, time limit, target points) and show the Master QR code.
+2. After the hunt, import each student's review file and approve or reject each photo. Grades come from approved photos.
+3. Optionally scan students' submission QR codes for a quick, self-reported tally.
+4. Split the class into squads for a class battle, and export the class list as a CSV spreadsheet.
+
+Students:
+
+1. Open Teacher Mode → Student, enter a real name, and scan the teacher's class QR code.
+2. Hunt. Only photos taken during the class count.
+3. Tap "Save Review File" and send it to the teacher (AirDrop, Nearby Share, email…).
+
+Every device has a random ID, so students with the same name are kept apart.
+
+Suitable for literacy, spelling, ESL / EFL, media studies, and field trips.
+
+## Who it's for
+
+- Collectors who already photograph funny signs and lose them in their camera roll.
+- Friends on walks and trips who want a game that needs no internet.
+- Teachers who want a hands-on literacy activity with evidence they can check.
+- Language learners: spotting why something is wrong teaches what's right.
+- Travellers collecting memorable translations.
+
+## Offline, installing and backups
+
+- After the first online visit, everything works offline: capturing, browsing, QR games and class hunts.
+- Install with the browser's "Add to Home Screen" / "Install app".
+- Backups: Curator Profile → Export Backup saves finds, photos and locked points to a file. Import Backup restores it. On a new phone with no finds yet, the user can restore their own backup including points. Other people's backups can be added view-only.
+- Clearing the browser's site data or losing the device deletes the collection unless a backup was exported.
+
+## Reminders
+
+Optional notifications in three voices (Dramatic Mascot, Stern Proofreader, Urban Safari Scout), plus an optional daily hunt prompt. Background reminders need an installed app on a browser that supports periodic background sync (for example Chrome on Android).
+
+## Privacy
+
+- No accounts, no analytics, no advertising, no tracking cookies.
+- Photos, notes and scores are stored only in the browser on the user's device.
+- The app contacts no third parties; fonts and all assets are served from the app's own site.
+- Data leaves the device only when the user shows a QR code, sends a file, or shares a card.
+- Location is never read from GPS; the location field is typed by the user.
+
+Full policy: https://typo-hunter-topaz.vercel.app/privacy.html
+
+## FAQ
+
+- Why did a photo earn 0 points? It repeats a photo already scored, or it was imported from someone else.
+- If I delete a photo, do I lose its points? No, points are locked in.
+- Why didn't a gallery photo count in Speed Blitz or a class hunt? Only photos taken during the round or class count.
+- Do ratings or Legends give points? No.
+- Does it work without internet? Yes, after the first visit.
+- Can I read text from photos automatically? Only in browsers that support on-device text detection; otherwise the user types the wording.
+
+## Project
+
+- Source: https://github.com/PrinceJoseph-software/typo-hunter (MIT licence)
+- Issues and ideas: https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose
+- Security reports: https://github.com/PrinceJoseph-software/typo-hunter/security/advisories/new

@@ -1,0 +1,5 @@
+# Typo Hunter: everything public may be crawled, including by AI assistants.
+User-agent: *
+Allow: /
+
+Sitemap: https://typo-hunter-topaz.vercel.app/sitemap.xml

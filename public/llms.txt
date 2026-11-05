@@ -1,0 +1,25 @@
+# Typo Hunter
+
+> Typo Hunter is a free, private, offline-first web app for photographing and collecting typos, mistranslations and signage mistakes found in the real world ("The world is full of typos. Someone has to collect them."). Users build a personal typo museum, play QR-code games with friends without internet, and teachers can run class typo hunts where they review students' photos. No account, no tracking: all data stays on the user's device.
+
+Key facts:
+
+- URL: https://typo-hunter-topaz.vercel.app/ (installable Progressive Web App; works offline after the first visit)
+- Price: free. Licence: MIT (open source)
+- Accounts: none. Photos and notes are stored only in the browser on the user's device; the app contacts no third parties.
+- Language of the interface: English
+
+## Using the app
+
+- [How it works and who it's for](https://typo-hunter-topaz.vercel.app/llms-full.txt): full description of features, points rules, games, class hunts and FAQ
+- [Privacy policy](https://typo-hunter-topaz.vercel.app/privacy.html): what is stored, what leaves the device and when
+
+## Project
+
+- [Source code (GitHub)](https://github.com/PrinceJoseph-software/typo-hunter): MIT-licensed
+- [Report a problem or suggest an idea](https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose)
+
+## Optional
+
+- [Architecture reference](https://github.com/PrinceJoseph-software/typo-hunter/blob/main/docs/ARCHITECTURE.md): data model, storage and QR formats
+- [Development guide](https://github.com/PrinceJoseph-software/typo-hunter/blob/main/docs/DEVELOPMENT.md): run, build and deploy
