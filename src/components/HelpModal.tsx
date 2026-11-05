@@ -52,7 +52,7 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
   },
   {
     q: 'I got a new phone. How do I move my collection?',
-    a: "On the old phone: Curator Profile → Export Backup, and send the file to yourself. On the new phone: Curator Profile → Import Backup. All your finds and photos come back, but for now they arrive view-only and your points don't transfer to a different phone. Restoring on the same phone (for example after clearing your browser) brings everything back, points included.",
+    a: "On the old phone: Curator Profile → Export Backup, and send the file to yourself. On the new phone, before taking any new photos: Curator Profile → Import Backup, then choose \"Yes, restore my collection\". Your finds, photos and locked points all come back. Restoring on the same phone (for example after clearing your browser) works the same way. Once a phone has finds of its own, backups from other phones can only be added view-only.",
   },
   {
     q: "Can I see a friend's collection?",
@@ -192,7 +192,8 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayT
               <li><strong>Install:</strong> use your browser's <em>Add to Home Screen</em> (or <em>Install app</em>) to open it like a normal app.</li>
               <li>
                 <strong>Back up regularly:</strong> your museum lives only on this device. Clearing site data or losing the
-                phone deletes it. Curator Profile → <em>Export Backup</em> saves all your finds and photos.
+                phone deletes it. Curator Profile → <em>Export Backup</em> saves your finds, photos and locked points, and
+                you can restore them on a new phone.
               </li>
             </ul>
           </Card>
