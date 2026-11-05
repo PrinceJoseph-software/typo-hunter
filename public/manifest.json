@@ -3,7 +3,7 @@
   "short_name": "Typo Hunter",
   "name": "Typo Hunter: collect the typos you spot in the wild",
   "description": "Photograph and collect funny typos, mistranslations and signage mistakes. Battle friends by QR code or run a class typo hunt. Free, offline, private.",
-  "start_url": "/",
+  "start_url": "/app/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

@@ -34,7 +34,8 @@ A detailed reference (data model, storage keys, QR payload formats) is in [`ARCH
 ## Project structure
 
 ```
-public/            index.html (Vite root), manifest.json, sw.js, icons
+public/            index.html (front page), app/index.html (app shell), manifest.json, sw.js,
+                   icons, SEO files, ocr/ (English OCR model)
 src/
   main.tsx         React entry + service worker registration
   App.tsx          App shell, view switching, bottom navigation, global modals
@@ -88,6 +89,13 @@ pnpm build               # type check + production build
 ```
 
 There are no unit or end-to-end tests yet.
+
+## Pages and text reading
+
+- `/` is a static front page (`public/index.html`, styles in `src/landing/landing.css`, a tiny script in `src/landing/landing.ts`). The installed app skips it and opens `/app/`.
+- `/app/` is the React app (`public/app/index.html` → `src/main.tsx`). `vercel.json` rewrites `/app/*` to it.
+- **Text reading** (`src/utils/ocrService.ts`) runs Tesseract.js on the device. The build copies the engine (`worker.min.js`, the LSTM WebAssembly cores) and word lists into `/ocr/`; the English model lives in `public/ocr/eng.traineddata.gz`. Nothing loads from a CDN. The service worker caches `/ocr/*` on first use (not on install), and the CSP allows WebAssembly via `'wasm-unsafe-eval'`.
+- **Spell check** (`src/utils/spellcheck.ts`) flags words missing from a 275k-word list and ranks suggestions by SCOWL frequency levels.
 
 ## Search, sharing and AI-readable files
 

@@ -2,13 +2,14 @@
 
 > The world is full of typos. Someone has to collect them.
 
-Typo Hunter is a free, open-source (MIT) Progressive Web App at https://typo-hunter-topaz.vercel.app/ for photographing and collecting language mistakes found in the real world: menus offering "Soap of the Day", signs that went badly wrong, rogue apostrophes on price tags, and machine translations that gave up. It runs in any modern browser, installs to the home screen, works offline after the first visit, needs no account, and keeps all data on the user's device.
+Typo Hunter is a free, open-source (MIT) Progressive Web App (front page: https://typo-hunter-topaz.vercel.app/, app: https://typo-hunter-topaz.vercel.app/app/) for photographing and collecting language mistakes found in the real world: menus offering "Soap of the Day", signs that went badly wrong, rogue apostrophes on price tags, and machine translations that gave up. It runs in any modern browser, installs to the home screen, works offline after the first visit, needs no account, and keeps all data on the user's device.
 
 ## Core loop
 
 1. Spot a typo and tap the yellow "+" (Spot) button.
-2. Take a photo (or pick one from the gallery), add a title and a category.
-3. Record "What it actually said" and "What they meant" (for example "Coffe and Trea" → "Coffee and Tea"), plus an optional location and notes.
+2. Take a photo (or pick one from the gallery). The app reads the text on the phone, highlights words that look misspelt and suggests fixes (for example "Coffe and Trea" → "Coffee and Tea").
+3. Check "What it actually said" and "What they meant", tap the right suggestion, pick a category, and optionally add a location and notes.
+   Finds whose wording matches what the app read are marked "Read by app" (read on the phone; not proof).
 4. Save ("Archive Specimen"). The find joins the user's Archive.
 
 Categories: Food and Drink, Business Signs, Transport, Advertising, Menus, Handwritten Signs, Translation Mishaps, Other.
@@ -102,7 +103,7 @@ Full policy: https://typo-hunter-topaz.vercel.app/privacy.html
 - Why didn't a gallery photo count in Speed Blitz or a class hunt? Only photos taken during the round or class count.
 - Do ratings or Legends give points? No.
 - Does it work without internet? Yes, after the first visit.
-- Can I read text from photos automatically? Only in browsers that support on-device text detection; otherwise the user types the wording.
+- How is text read from photos? On the device with Tesseract (English). The reader (~7 MB) downloads once from the app's own site, then works offline; photos are never uploaded. Real-word mistakes ("Soap of the Day") and grammar can't be detected automatically.
 
 ## Project
 

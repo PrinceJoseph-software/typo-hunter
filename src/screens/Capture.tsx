@@ -4,9 +4,9 @@
  * on-device OCR text extraction, and curatorial cataloging workflow.
  *
  * ARCHITECTURAL DESIGN:
- *   - Offline Optical Character Recognition: Upon image selection, triggers `runOfflineOCR`
- *     to detect physical signage text and flag grammatical warning signs (rogue apostrophes,
- *     repeated words) without network dependencies.
+ *   - On-device text reading: on photo selection, `runOfflineOCR` reads the sign, flags
+ *     misspelt words with suggestions and pre-fills the wording fields. A saved find whose
+ *     wording matches what was read gets the "Read by app" badge.
  *   - Educational Value Meter: Displays deterministic scoring breakdown for school & peer challenges.
  *   - Off-screen Downsampling: Compresses raw camera photos into optimized primary (~150KB)
  *     and thumbnail (~20KB) payloads via `compressImage`.
@@ -16,7 +16,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CATEGORIES } from '../utils/constants';
 import { compressImage } from '../utils/imageUtils';
 import { dbService, Discovery } from '../db/database';
-import { runOfflineOCR, OCRResult, isTextRecognitionSupported } from '../utils/ocrService';
+import { runOfflineOCR, OCRResult, OCRProgress, isTextRecognitionSupported, wordingMatchesOcr } from '../utils/ocrService';
+import { matchCase } from '../utils/spellcheck';
 import { pointsLedger } from '../utils/pointsLedger';
 import { calculateSpecimenScore } from '../utils/proofOfSighting';
 import { recordCaptureActivity } from '../utils/dynamicFavicon';
@@ -92,6 +93,57 @@ export const Capture: React.FC<CaptureProps> = ({
 
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
+  const [ocrFailed, setOcrFailed] = useState(false);
+  // Latest field values for the async reader (avoid overwriting what the user typed meanwhile).
+  const fieldsRef = useRef({ title, originalWording, intendedWording });
+  fieldsRef.current = { title, originalWording, intendedWording };
+
+  /** Reads the photo on this device, then pre-fills the wording fields the user hasn't typed in yet. */
+  const readPhoto = async (source: File | string) => {
+    setOcrLoading(true);
+    setOcrFailed(false);
+    setOcrProgress(null);
+    try {
+      const result = await runOfflineOCR(source, p => setOcrProgress(p));
+      if (!result) {
+        setOcrFailed(true);
+        return;
+      }
+      setOcrResult(result);
+      setChosenFixes(
+        Object.fromEntries(result.flagged.filter(f => f.suggestions[0]).map(f => [f.original, f.suggestions[0]]))
+      );
+      if (!result.detectedText) return;
+      const current = fieldsRef.current;
+      if (!current.originalWording.trim()) setOriginalWording(result.detectedText.slice(0, 200));
+      if (!current.intendedWording.trim() && result.suggestedCorrection) setIntendedWording(result.suggestedCorrection.slice(0, 200));
+      if (!current.title.trim()) {
+        const first = result.flagged[0];
+        setTitle((first ? `"${first.original}" spotted` : result.detectedText).slice(0, 60));
+      }
+    } finally {
+      setOcrLoading(false);
+      setOcrProgress(null);
+    }
+  };
+
+  // The fix chosen for each flagged word; "What they meant" is rebuilt from "What it said".
+  const [chosenFixes, setChosenFixes] = useState<Record<string, string>>({});
+
+  const applyFixes = (text: string, fixes: Record<string, string>) =>
+    Object.entries(fixes).reduce((out, [original, replacement]) => {
+      const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return out.replace(new RegExp(`\\b${escaped}\\b`, 'g'), matchCase(original, replacement));
+    }, text);
+
+  /** Uses a chosen suggestion for one flagged word in "What they meant". */
+  const applySuggestion = (original: string, replacement: string) => {
+    const next = { ...chosenFixes, [original]: replacement };
+    setChosenFixes(next);
+    const base = originalWording || ocrResult?.detectedText || '';
+    setIntendedWording(applyFixes(base, next).slice(0, 200));
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -131,27 +183,8 @@ export const Capture: React.FC<CaptureProps> = ({
       setError(null);
       setOcrResult(null);
 
-      // On-device text recognition, only where the browser actually supports it
-      if (!ocrSupported) return;
-      setOcrLoading(true);
-      runOfflineOCR(file)
-        .then(result => {
-          if (!result) return;
-          setOcrResult(result);
-          // If text was detected and title is empty, pre-fill title suggestion
-          if (result.detectedText && !title) {
-            setTitle(result.detectedText.slice(0, 40));
-          }
-          if (result.detectedText && !originalWording) {
-            setOriginalWording(result.detectedText);
-          }
-        })
-        .catch(err => {
-          console.warn('[Capture] OCR optical scan error:', err);
-        })
-        .finally(() => {
-          setOcrLoading(false);
-        });
+      // Read the text on the photo, on this device
+      if (ocrSupported) void readPhoto(file);
     } catch {
       setError('Failed to load image preview.');
     }
@@ -165,30 +198,16 @@ export const Capture: React.FC<CaptureProps> = ({
     setImageFile(null);
     setImagePreview(null);
     setOcrResult(null);
+    setOcrFailed(false);
+    setChosenFixes({});
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
   const handleManualOCR = async () => {
-    if (!imagePreview && !imageFile) return;
-    setOcrLoading(true);
-    try {
-      const source = imageFile || imagePreview!;
-      const result = await runOfflineOCR(source);
-      if (!result || !result.detectedText) {
-        setNotice('No text was recognised in this photo. Type the wording yourself.');
-        return;
-      }
-      setOcrResult(result);
-      if (result.detectedText && !originalWording) {
-        setOriginalWording(result.detectedText);
-      }
-    } catch (e) {
-      console.warn('Manual OCR error:', e);
-    } finally {
-      setOcrLoading(false);
-    }
+    if (!imageFile && !imagePreview) return;
+    await readPhoto(imageFile || imagePreview!);
   };
 
   // Calculate estimated points preview for students / hunters
@@ -254,6 +273,11 @@ export const Capture: React.FC<CaptureProps> = ({
         imageHash: compressed.hash || undefined,
         duplicateOf,
         origin: 'own',
+        ocrText: ocrResult?.detectedText || undefined,
+        readByApp:
+          !!ocrResult?.detectedText && !!originalWording.trim() && wordingMatchesOcr(originalWording, ocrResult.detectedText)
+            ? true
+            : undefined,
       };
 
       const saved = await dbService.saveDiscovery(newDiscovery, compressed.imageBlob);
@@ -388,7 +412,14 @@ export const Capture: React.FC<CaptureProps> = ({
                 {ocrLoading && (
                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white font-mono text-xs gap-2">
                     <div className="w-8 h-8 border-3 border-white border-t-[#E8B92D] rounded-full animate-spin" />
-                    <span>Reading text on the photo…</span>
+                    <span>
+                      {ocrProgress?.stage === 'download'
+                        ? `Getting the text reader ready… ${Math.round((ocrProgress.progress || 0) * 100)}%`
+                        : `Reading text on the photo… ${Math.round((ocrProgress?.progress || 0) * 100)}%`}
+                    </span>
+                    {ocrProgress?.stage === 'download' && (
+                      <span className="text-[10px] text-gray-300 px-4 text-center">First time only: about 7 MB, then it works offline.</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -408,7 +439,7 @@ export const Capture: React.FC<CaptureProps> = ({
                     disabled={ocrLoading}
                     className="btn-secondary text-xs font-bold px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer"
                   >
-                    <span className="flex items-center gap-1.5"><IconBolt size={12} /> Read Text</span>
+                    <span className="flex items-center gap-1.5"><IconBolt size={12} /> {ocrResult ? 'Read Again' : 'Read Text'}</span>
                   </button>
                 )}
               </div>
@@ -447,47 +478,68 @@ export const Capture: React.FC<CaptureProps> = ({
           />
         </div>
 
-        {/* OCR Result Banner */}
-        {ocrResult && (
-          <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] border-2 border-black shadow-brutal-sm space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider bg-black text-[#E8B92D] px-2 py-0.5 rounded">
-                <span className="flex items-center gap-1"><IconBolt size={10} /> Text found on photo</span>
-              </span>
-            </div>
+        {/* What the app read */}
+        {ocrFailed && !ocrLoading && (
+          <p className="text-xs font-mono text-gray-600 bg-white border border-black/15 rounded-xl p-3" role="status">
+            The app couldn't read text from this photo. Type the wording yourself below.
+          </p>
+        )}
+        {ocrResult && !ocrLoading && (
+          <section className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] border-2 border-black shadow-brutal-sm space-y-2.5" aria-label="Text read from the photo">
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider bg-black text-[#E8B92D] px-2 py-0.5 rounded">
+              <IconBolt size={10} /> Read on your phone
+            </span>
 
             {ocrResult.detectedText ? (
-              <div className="bg-white p-2.5 rounded-xl border border-black/15 font-mono text-xs text-black italic">
-                "{ocrResult.detectedText}"
-              </div>
-            ) : null}
+              <>
+                <p className="bg-white p-2.5 rounded-xl border border-black/15 font-mono text-xs text-black">"{ocrResult.detectedText}"</p>
 
-            {ocrResult.detectedMistakeHint && (
-              <div className="text-[11px] font-mono font-bold text-[#D66A4A] bg-[#fdf6f4] p-2 rounded-lg border border-[#D66A4A]/30 flex items-center gap-1.5">
-                <IconAlert size={14} className="flex-shrink-0" />
-                <span>{ocrResult.detectedMistakeHint}</span>
-              </div>
+                {ocrResult.flagged.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-mono font-bold text-[#D66A4A] flex items-center gap-1.5">
+                      <IconAlert size={14} className="flex-shrink-0" />
+                      {ocrResult.flagged.length === 1 ? 'This word looks wrong:' : 'These words look wrong:'}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {ocrResult.flagged.map(f => (
+                        <li key={f.original} className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+                          <span className="line-through decoration-[#D66A4A] decoration-2 font-bold">{f.original}</span>
+                          <span aria-hidden="true">→</span>
+                          {f.suggestions.length > 0 ? (
+                            f.suggestions.map(sug => (
+                              <button
+                                key={sug}
+                                type="button"
+                                onClick={() => applySuggestion(f.original, sug)}
+                                aria-pressed={chosenFixes[f.original] === sug}
+                                className={`px-2 py-0.5 rounded-lg border-2 border-black font-bold cursor-pointer hover:bg-[#E8B92D] ${
+                                  chosenFixes[f.original] === sug ? 'bg-[#E8B92D]' : 'bg-white'
+                                }`}
+                                aria-label={`Use ${sug} in What they meant`}
+                              >
+                                {sug}
+                              </button>
+                            ))
+                          ) : (
+                            <span className="text-gray-500">no suggestion, type the fix below</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-[11px] font-mono text-gray-700">
+                    No misspelt words found. The mistake may be a real word in the wrong place (like "Soap of the Day"), grammar or a translation, so tell us what they meant below.
+                  </p>
+                )}
+                <p className="text-[10px] font-mono text-gray-500">
+                  We've filled in what we could. Check it and fix anything the app misread.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs font-mono text-gray-600">No clear text found. Try a closer, straighter photo, or type the wording below.</p>
             )}
-
-            {ocrResult.detectedText && (
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setOriginalWording(ocrResult.detectedText)}
-                  className="flex-1 btn-secondary text-[11px] font-bold py-1.5 rounded-lg uppercase tracking-wider cursor-pointer"
-                >
-                  Use as "What It Said"
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTitle(ocrResult.detectedText.slice(0, 40))}
-                  className="flex-1 btn-secondary text-[11px] font-bold py-1.5 rounded-lg uppercase tracking-wider cursor-pointer"
-                >
-                  Use as Title
-                </button>
-              </div>
-            )}
-          </div>
+          </section>
         )}
 
         {/* Core Metadata Fields */}

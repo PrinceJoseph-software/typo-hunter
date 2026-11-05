@@ -15,6 +15,7 @@
 import React, { useState, useMemo } from 'react';
 import { Discovery } from '../db/database';
 import { CATEGORIES } from '../utils/constants';
+import { ReadByAppBadge } from '../components/ReadByAppBadge';
 import { IconHeart, IconSearch, IconGrid, IconTrophy, IconClose, IconStar, IconCamera } from '../components/Icons';
 
 interface CollectionProps {
@@ -225,8 +226,9 @@ export const Collection: React.FC<CollectionProps> = ({
                     )}
                   </div>
                   <div className="p-3">
-                    <span className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-wider block mb-0.5 truncate">
-                      {item.category}
+                    <span className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-0.5 truncate">
+                      <span className="truncate">{item.category}</span>
+                      {item.readByApp && <ReadByAppBadge compact />}
                     </span>
                     <h3 className="font-heading font-extrabold text-sm sm:text-base text-black mb-1 line-clamp-2 leading-snug group-hover:text-[#D66A4A] transition-colors">
                       {item.title}
@@ -279,6 +281,7 @@ export const Collection: React.FC<CollectionProps> = ({
                   <h3 className="font-heading font-extrabold text-sm sm:text-base text-black truncate group-hover:text-[#D66A4A] transition-colors">
                     {item.title}
                   </h3>
+                  {item.readByApp && <ReadByAppBadge compact />}
                   {item.originalWording && (
                     <p className="text-xs text-gray-600 truncate font-mono italic">
                       "{item.originalWording}"

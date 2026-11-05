@@ -21,6 +21,9 @@
 
 const CACHE_VERSION = 'dev'; /*__BUILD_VERSION__*/
 const CACHE_NAME = `typo-hunter-${CACHE_VERSION}`;
+// Text-reading engine and dictionary: cached on first use, kept across app updates
+// (bump the version when the files change).
+const OCR_CACHE = 'typo-hunter-ocr-v1';
 
 const PRECACHE_ASSETS = [/*__PRECACHE_START__*/ '/', '/index.html', '/manifest.json' /*__PRECACHE_END__*/];
 
@@ -41,7 +44,7 @@ self.addEventListener('activate', (event) => {
         Promise.all(
           keys
             // Also removes the old Google Fonts cache from earlier versions.
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => key !== CACHE_NAME && key !== OCR_CACHE)
             .map((key) => caches.delete(key))
         )
       )
@@ -49,19 +52,26 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Two pages: the app lives under /app/, everything else is the public front page.
+function shellFor(url) {
+  return url.pathname === '/app' || url.pathname.startsWith('/app/') ? '/app/index.html' : '/index.html';
+}
+
 async function networkFirstNavigation(request) {
   const cache = await caches.open(CACHE_NAME);
+  const url = new URL(request.url);
+  const shell = url.pathname === '/privacy.html' ? '/privacy.html' : shellFor(url);
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     const response = await fetch(request, { signal: controller.signal });
     clearTimeout(timeout);
-    if (response && response.ok) {
-      cache.put('/index.html', response.clone());
+    if (response && response.ok && response.headers.get('content-type')?.includes('text/html')) {
+      cache.put(shell, response.clone());
     }
     return response;
   } catch {
-    const cached = (await cache.match('/index.html', MATCH_OPTIONS)) || (await cache.match('/', MATCH_OPTIONS));
+    const cached = await cache.match(shell, MATCH_OPTIONS);
     return cached || Response.error();
   }
 }
@@ -110,6 +120,10 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstNavigation(request));
+    return;
+  }
+  if (url.pathname.startsWith('/ocr/')) {
+    event.respondWith(cacheFirst(request, OCR_CACHE));
     return;
   }
   if (url.pathname.startsWith('/assets/')) {

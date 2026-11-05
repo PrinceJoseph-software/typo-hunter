@@ -64,6 +64,10 @@ export interface Discovery {
   origin?: 'own' | 'imported';
   /** Display name of the hunter an imported record came from. */
   sourceHunter?: string;
+  /** Text the on-device reader found in the photo (≤500 chars). */
+  ocrText?: string;
+  /** "Read by app": the saved wording matches text the app read from the photo on the device. Not proof. */
+  readByApp?: boolean;
 }
 
 /**
@@ -228,6 +232,8 @@ export function validateDiscovery(input: unknown): Discovery {
     duplicateOf: typeof d.duplicateOf === 'string' ? d.duplicateOf.slice(0, 80) : undefined,
     origin: d.origin === 'imported' ? 'imported' : 'own',
     sourceHunter: typeof d.sourceHunter === 'string' ? d.sourceHunter.trim().slice(0, 40) : undefined,
+    ocrText: typeof d.ocrText === 'string' && d.ocrText.trim() ? d.ocrText.trim().slice(0, 500) : undefined,
+    readByApp: d.readByApp === true ? true : undefined,
   };
 }
 

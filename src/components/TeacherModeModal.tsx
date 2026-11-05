@@ -849,6 +849,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                                     <div className="text-gray-500">
                                       {new Date(ev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {ev.points} pts
                                     </div>
+                                    {ev.readByApp && <div className="text-[#2D4A27] font-bold">✓ Read by app</div>}
                                     {ev.flag && <div className="text-[#D66A4A] font-bold">{ev.flag}</div>}
                                     <div className="flex gap-1 mt-1">
                                       <button

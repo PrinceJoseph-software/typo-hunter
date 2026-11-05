@@ -63,8 +63,12 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
     a: "Turn them on in Curator Profile → Field Dispatches. Reminders while the app is closed need an installed app on a browser that supports background updates (such as Chrome on Android). Elsewhere you'll see the mascot and a welcome-back message when you open the app instead.",
   },
   {
-    q: 'Why is there no "Read Text" button?',
-    a: "Reading text from photos uses a feature most browsers haven't switched on yet. Where it isn't available, the button stays hidden and you type the wording yourself.",
+    q: 'How does the app read the text on my photo?',
+    a: "It reads it on your phone, so your photo never leaves it. The first time, it downloads the reader (about 7 MB) from this app's own site; after that it works offline. It highlights words that look misspelt and suggests fixes. Mistakes that are real words (like \"Soap of the Day\") or grammar slips can't be spotted automatically, so you add those yourself. If a photo is blurry or at an angle, tap Read Again or type the wording.",
+  },
+  {
+    q: 'What does "Read by app" mean?',
+    a: "The wording you saved matches what the app read from your photo, on your phone. It's a helpful sign that the find is real, but it isn't proof, since anything on a phone can be changed.",
   },
   {
     q: 'Two students in my class have the same name. Is that a problem?',
@@ -109,7 +113,8 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayT
             <p>Typo Hunter is your pocket museum for language mistakes found in the wild: signs, menus, price tags, billboards.</p>
             <ol className="list-decimal pl-4 space-y-1">
               <li>Spot a typo and tap the yellow <strong>+</strong> (Spot).</li>
-              <li>Take the photo, give it a title, and pick a category.</li>
+              <li>Take the photo. The app reads the text and highlights words that look wrong.</li>
+              <li>Check what it filled in, tap the right fix, and pick a category.</li>
               <li>
                 Add <strong className="text-[#D66A4A]">What it actually said</strong> and{' '}
                 <strong className="text-[#82917B]">What they meant</strong>, for example <em>"Coffe and Trea"</em> →{' '}

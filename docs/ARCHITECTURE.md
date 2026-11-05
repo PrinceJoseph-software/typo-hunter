@@ -9,7 +9,9 @@ Typo Hunter is a static single-page React app. There is no server component.
 | Concern | Implementation | File |
 |---|---|---|
 | Entry, service worker registration (production only) | `ReactDOM.createRoot`, `navigator.serviceWorker.register('/sw.js')` | `src/main.tsx` |
-| Navigation | `currentView` string in React state; no URL routing | `src/App.tsx` |
+| Pages | Public front page at `/` (static HTML, `src/landing/`) and the app at `/app/` (React) | `public/index.html`, `public/app/index.html` |
+| Navigation inside the app | `currentView` string in React state | `src/App.tsx` |
+| Text reading | Tesseract.js on the device; engine, English model and word lists served from `/ocr/`, cached on first use | `src/utils/ocrService.ts`, `src/utils/spellcheck.ts` |
 | Global state | `useState` in `App`; list data (with thumbnails, not full photos) loaded from IndexedDB | `src/App.tsx` |
 | Entries and photos | IndexedDB via `idb` | `src/db/database.ts` |
 | Locked points | IndexedDB `meta` store, cached in memory | `src/utils/pointsLedger.ts` |
@@ -51,6 +53,8 @@ interface Discovery {
   duplicateOf?: string;     // earlier scored entry with the same photo → earns 0
   origin?: 'own' | 'imported';
   sourceHunter?: string;    // who an imported entry came from
+  ocrText?: string;         // text the on-device reader found (≤500)
+  readByApp?: boolean;      // saved wording matches ocrText ("Read by app" badge; not proof)
 }
 ```
 
