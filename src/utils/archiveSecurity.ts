@@ -1,155 +1,193 @@
 /**
  * @file archiveSecurity.ts
- * @description Tamper-evident cryptographic hashing and signature verification for JSON archive export/import.
+ * @description Backup export/import with an integrity checksum.
  *
- * ARCHITECTURAL DESIGN:
- * To prevent malicious or accidental score tampering, unauthorized point inflation, or modified
- * specimen records, exports are wrapped in a signed Curatorial Envelope containing a SHA-256
- * cryptographic integrity digest.
+ * WHAT THE CHECKSUM DOES AND DOES NOT DO:
+ * The SHA-256 checksum detects accidental damage (truncated downloads, broken edits).
+ * It is NOT a security signature: everything needed to recompute it ships with the app,
+ * so a determined person can edit a file and fix the checksum. Do not use imported files
+ * as proof of anything.
  *
- * On import, the client re-computes the digest across the canonical payload. If an external editor
- * altered titles, scores, timestamps, or wording, the signature check fails immediately and flags
- * the file as tampered.
+ * OWNERSHIP:
+ * Exports carry the exporting device's id. Importing your own backup restores your
+ * entries and locked points. Importing anyone else's file adds their entries to your
+ * museum for viewing, marked as imported, and they never count toward your points.
+ *
+ * FORMAT v3 (current): images are embedded per entry; the file is assembled as a Blob
+ * one entry at a time so large collections don't need one giant string in memory.
+ * v2 (salted whole-file hash) and v1 (bare array) files can still be imported.
  */
 
-import { Discovery } from '../db/database';
-import { calculateTotalCuratorPoints } from './proofOfSighting';
+import { Discovery, dbService, blobToDataUrl } from '../db/database';
+import { pointsLedger, Ledger } from './pointsLedger';
+import { getDeviceId } from './identity';
 
-export interface SecureArchivePackage {
+export interface ArchiveHeaderV3 {
   app: 'TYPO_HUNTER_ARCHIVE';
-  formatVersion: 2;
+  formatVersion: 3;
   exportedAt: string;
   hunter: string;
+  ownerId: string;
   totalPoints: number;
   specimenCount: number;
-  integritySignature: string;
-  discoveries: Discovery[];
+  pointsLedger: Ledger;
+  checksum: string;
 }
 
-const ARCHIVE_SALT = 'TYPO_HUNTER_CURATORIAL_SOVEREIGNTY_2026';
+const LEGACY_V2_SALT = 'TYPO_HUNTER_CURATORIAL_SOVEREIGNTY_2026';
 
-/**
- * Computes a SHA-256 hex digest using the browser's native Web Crypto API.
- */
-async function computeSha256(canonicalString: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(canonicalString + ARCHIVE_SALT);
+async function sha256Hex(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(hashBuffer), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function checksumInput(h: Omit<ArchiveHeaderV3, 'checksum'>, itemHashes: string[]): string {
+  return [h.formatVersion, h.exportedAt, h.hunter, h.ownerId, h.totalPoints, h.specimenCount, JSON.stringify(h.pointsLedger), itemHashes.join(',')].join('::');
 }
 
 /**
- * Creates a signed, tamper-evident JSON archive export package.
+ * Builds a v3 backup file as a Blob. Full-size images are read and encoded one at a time.
  */
-export async function createSecureArchiveExport(
-  discoveries: Discovery[],
-  hunterName: string
-): Promise<string> {
-  const exportedAt = new Date().toISOString();
-  const totalPoints = calculateTotalCuratorPoints(discoveries);
-  const specimenCount = discoveries.length;
+export async function createArchiveExportBlob(discoveries: Discovery[], hunterName: string): Promise<Blob> {
+  const parts: string[] = [];
+  const itemHashes: string[] = [];
 
-  // Build deterministic canonical string of discoveries
-  const canonicalData = JSON.stringify(discoveries);
-  const payloadToSign = `${exportedAt}::${hunterName}::${totalPoints}::${specimenCount}::${canonicalData}`;
-  const integritySignature = await computeSha256(payloadToSign);
+  for (const d of discoveries) {
+    const blob = await dbService.getImage(d.id).catch(() => undefined);
+    const image = blob ? await blobToDataUrl(blob) : d.thumbnail;
+    const itemJson = JSON.stringify({ ...d, image });
+    itemHashes.push(await sha256Hex(itemJson));
+    parts.push(itemJson);
+  }
 
-  const archivePackage: SecureArchivePackage = {
+  const headerNoChecksum: Omit<ArchiveHeaderV3, 'checksum'> = {
     app: 'TYPO_HUNTER_ARCHIVE',
-    formatVersion: 2,
-    exportedAt,
+    formatVersion: 3,
+    exportedAt: new Date().toISOString(),
     hunter: hunterName.trim() || 'Hunter',
-    totalPoints,
-    specimenCount,
-    integritySignature,
-    discoveries,
+    ownerId: getDeviceId(),
+    totalPoints: pointsLedger.getTotal(),
+    specimenCount: discoveries.length,
+    pointsLedger: pointsLedger.getAll(),
+  };
+  const header: ArchiveHeaderV3 = {
+    ...headerNoChecksum,
+    checksum: await sha256Hex(checksumInput(headerNoChecksum, itemHashes)),
   };
 
-  return JSON.stringify(archivePackage, null, 2);
+  const headerJson = JSON.stringify(header);
+  const blobParts: BlobPart[] = [headerJson.slice(0, -1), ',"discoveries":['];
+  parts.forEach((p, i) => {
+    if (i > 0) blobParts.push(',');
+    blobParts.push(p);
+  });
+  blobParts.push(']}');
+  return new Blob(blobParts, { type: 'application/json' });
+}
+
+/** Saves a Blob as a file via an object URL (no huge data: URL strings). */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export interface VerificationResult {
   isValid: boolean;
+  /** Checksum didn't match: the file was damaged or edited. */
   isTampered: boolean;
   isLegacy: boolean;
   discoveries: Discovery[];
   hunterName?: string;
+  /** Device that exported the file (v3 only). */
+  ownerId?: string;
+  /** True when the file was exported by this device. */
+  isOwnBackup: boolean;
+  pointsLedger?: Ledger;
   totalPoints?: number;
   statusMessage: string;
 }
 
-/**
- * Verifies a JSON archive payload for tampering and integrity.
- */
+function invalid(message: string, extra: Partial<VerificationResult> = {}): VerificationResult {
+  return { isValid: false, isTampered: false, isLegacy: false, isOwnBackup: false, discoveries: [], statusMessage: message, ...extra };
+}
+
+/** Parses an archive file and checks its checksum. */
 export async function verifyAndUnpackArchive(jsonString: string): Promise<VerificationResult> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonString);
   } catch {
+    return invalid('This file is not valid JSON.');
+  }
+
+  // v1: bare array, no checksum, no owner → treated as someone else's entries.
+  if (Array.isArray(parsed)) {
+    const valid = parsed.every(item => item && typeof item.title === 'string' && (typeof item.image === 'string' || typeof item.thumbnail === 'string'));
+    if (!valid) return invalid('Old-format backup contains invalid entries.', { isLegacy: true });
     return {
-      isValid: false,
+      isValid: true,
       isTampered: false,
-      isLegacy: false,
-      discoveries: [],
-      statusMessage: 'Invalid JSON file format. Parsing failed.',
+      isLegacy: true,
+      isOwnBackup: false,
+      discoveries: parsed as Discovery[],
+      statusMessage: 'Old-format backup (no checksum, no owner).',
     };
   }
 
-  // Handle Legacy Array Import (v1 format without signature)
-  if (Array.isArray(parsed)) {
-    const valid = parsed.every(item => item && typeof item.title === 'string' && typeof item.image === 'string');
-    if (!valid) {
-      return {
-        isValid: false,
-        isTampered: false,
-        isLegacy: true,
-        discoveries: [],
-        statusMessage: 'Legacy archive contains invalid specimen structures.',
-      };
+  const pkg = parsed as Record<string, unknown>;
+  if (pkg.app !== 'TYPO_HUNTER_ARCHIVE' || !Array.isArray(pkg.discoveries)) {
+    return invalid('Not a Typo Hunter backup file.');
+  }
+  const discoveries = pkg.discoveries as Discovery[];
+
+  if (pkg.formatVersion === 3) {
+    const header = pkg as unknown as ArchiveHeaderV3;
+    const itemHashes: string[] = [];
+    for (const item of discoveries) itemHashes.push(await sha256Hex(JSON.stringify(item)));
+    const { checksum, ...rest } = header;
+    const expected = await sha256Hex(checksumInput(rest, itemHashes));
+    if (expected !== checksum) {
+      return invalid('Checksum mismatch: the file is damaged or was edited. Import cancelled.', { isTampered: true });
+    }
+    const isOwnBackup = header.ownerId === getDeviceId();
+    return {
+      isValid: true,
+      isTampered: false,
+      isLegacy: false,
+      isOwnBackup,
+      discoveries,
+      hunterName: header.hunter,
+      ownerId: header.ownerId,
+      pointsLedger: header.pointsLedger,
+      totalPoints: header.totalPoints,
+      statusMessage: 'Checksum OK.',
+    };
+  }
+
+  // v2: salted whole-file hash, no owner → treated as someone else's entries.
+  if (typeof pkg.integritySignature === 'string') {
+    const payload = `${pkg.exportedAt}::${pkg.hunter}::${pkg.totalPoints}::${pkg.specimenCount}::${JSON.stringify(discoveries)}`;
+    const expected = await sha256Hex(payload + LEGACY_V2_SALT);
+    if (expected !== pkg.integritySignature) {
+      return invalid('Checksum mismatch: the file is damaged or was edited. Import cancelled.', { isTampered: true });
     }
     return {
       isValid: true,
       isTampered: false,
       isLegacy: true,
-      discoveries: parsed as Discovery[],
-      statusMessage: 'Legacy v1 archive loaded (No cryptographic hash present).',
+      isOwnBackup: false,
+      discoveries,
+      hunterName: typeof pkg.hunter === 'string' ? pkg.hunter : undefined,
+      statusMessage: 'Checksum OK (older format without an owner).',
     };
   }
 
-  // Handle Signed Archive Package (v2)
-  const pkg = parsed as Partial<SecureArchivePackage>;
-  if (pkg.app === 'TYPO_HUNTER_ARCHIVE' && Array.isArray(pkg.discoveries) && typeof pkg.integritySignature === 'string') {
-    const canonicalData = JSON.stringify(pkg.discoveries);
-    const payloadToVerify = `${pkg.exportedAt}::${pkg.hunter}::${pkg.totalPoints}::${pkg.specimenCount}::${canonicalData}`;
-    const expectedSignature = await computeSha256(payloadToVerify);
-
-    if (expectedSignature === pkg.integritySignature) {
-      return {
-        isValid: true,
-        isTampered: false,
-        isLegacy: false,
-        discoveries: pkg.discoveries,
-        hunterName: pkg.hunter,
-        totalPoints: pkg.totalPoints,
-        statusMessage: `Authentic Signed Archive. Cryptographic integrity verified (0 tampering detected).`,
-      };
-    } else {
-      return {
-        isValid: false,
-        isTampered: true,
-        isLegacy: false,
-        discoveries: [],
-        statusMessage: 'TAMPER DETECTED: The archive contents or score were modified externally. Import rejected.',
-      };
-    }
-  }
-
-  return {
-    isValid: false,
-    isTampered: false,
-    isLegacy: false,
-    discoveries: [],
-    statusMessage: 'Unrecognized archive package format.',
-  };
+  return invalid('Unrecognized backup format.');
 }

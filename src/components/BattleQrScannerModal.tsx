@@ -11,8 +11,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import jsQR from 'jsqr';
-import { pvpService, SpeedBlitzPayload } from '../utils/pvpService';
+import { pvpService, SpeedBlitzPayload, BlitzResultPayload } from '../utils/pvpService';
 import { ClassExpeditionPayload, StudentSubmissionPayload } from '../utils/teacherService';
 import { IconClose, IconCamera, IconAlert, IconCheck } from './Icons';
 
@@ -29,7 +30,10 @@ interface BattleQrScannerModalProps {
     team?: string;
     teamTag?: string;
     checksum?: string;
+    deviceId?: string;
   }) => void;
+  /** Speed Blitz result QR from the rival at the end of a round. */
+  onBlitzResultScanned?: (result: BlitzResultPayload) => void;
   onClassJoined?: (classPayload: ClassExpeditionPayload) => void;
   onStudentSubmissionScanned?: (submission: StudentSubmissionPayload) => void;
 }
@@ -41,7 +45,11 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
   onPassScanned,
   onClassJoined,
   onStudentSubmissionScanned,
+  onBlitzResultScanned,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [manualInput, setManualInput] = useState('');
@@ -65,31 +73,32 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
   };
 
   const processDecodedString = (decodedText: string): boolean => {
-    // 1. Try parsing as Speed Blitz challenge
+    // 0. Speed Blitz result (end of round)
+    const resultPayload = pvpService.parseBlitzResultPayload(decodedText);
+    if (resultPayload) {
+      if (!onBlitzResultScanned) {
+        setFeedback("That's a Speed Blitz result. Open it from the end-of-round screen.");
+        return false;
+      }
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(200);
+      setFeedback(`Got ${resultPayload.hunter}'s result: ${resultPayload.score} pts.`);
+      setTimeout(() => {
+        stopStream();
+        onBlitzResultScanned(resultPayload);
+      }, 500);
+      return true;
+    }
+
+    // 1. Speed Blitz challenge (join a round)
     const blitzPayload = pvpService.parseSpeedBlitzPayload(decodedText);
     if (blitzPayload) {
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(200);
+      if (onPassScanned || onBlitzResultScanned) {
+        // A challenge QR isn't a pass and carries no score.
+        setFeedback("That's a Speed Blitz challenge, not a Curator Pass. Ask for their pass instead.");
+        return false;
       }
-      if (onPassScanned) {
-        setFeedback(`Retrieved Rival Info: [${blitzPayload.hostTeamTag}] ${blitzPayload.hostName} (${blitzPayload.hostScore} pts)! Battling...`);
-        setTimeout(() => {
-          stopStream();
-          onPassScanned({
-            hunter: blitzPayload.hostName,
-            points: blitzPayload.hostScore,
-            specimens: Math.max(1, Math.round(blitzPayload.hostScore / 50)),
-            legends: 0,
-            rank: 'Challenger',
-            team: `[${blitzPayload.hostTeamTag}] ${blitzPayload.hostTeam}`,
-            teamTag: blitzPayload.hostTeamTag,
-            checksum: blitzPayload.signature,
-          });
-        }, 600);
-        return true;
-      }
-
-      setFeedback(`Connected to rival: [${blitzPayload.hostTeamTag}] ${blitzPayload.hostName} (${blitzPayload.hostScore} pts)! Starting Blitz...`);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(200);
+      setFeedback(`Joining ${blitzPayload.hostName}'s ${blitzPayload.durationMinutes}-minute Speed Blitz…`);
       setTimeout(() => {
         stopStream();
         onBlitzJoined(blitzPayload);
@@ -146,29 +155,15 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
               team: parsed.team,
               teamTag: typeof parsed.teamTag === 'string' ? parsed.teamTag : undefined,
               checksum: typeof parsed.checksum === 'string' ? parsed.checksum : undefined,
+              deviceId: typeof parsed.deviceId === 'string' ? parsed.deviceId : undefined,
             });
           }, 600);
           return true;
         }
 
-        const syntheticBlitz: SpeedBlitzPayload = {
-          app: 'TYPO_HUNTER_PVP',
-          action: 'SPEED_BLITZ_CHALLENGE',
-          battleId: `pass_${Date.now()}`,
-          hostName: parsed.hunter,
-          hostTeam: parsed.team || 'Rival Curators',
-          hostTeamTag: (parsed.hunter.slice(0, 3) || 'RIV').toUpperCase(),
-          hostScore: parsed.points || 150,
-          durationMinutes: 5,
-          timestamp: new Date().toISOString(),
-          signature: parsed.checksum || 'PASS-VERIFIED',
-        };
-        setFeedback(`Connected to rival: ${parsed.hunter} (${parsed.points || 150} pts)! Entering 5-min Blitz...`);
-        setTimeout(() => {
-          stopStream();
-          onBlitzJoined(syntheticBlitz);
-        }, 700);
-        return true;
+        // A Curator Pass can't start a Speed Blitz: both players need the same round.
+        setFeedback("That's a Curator Pass. To join a Speed Blitz, scan the host's Speed Blitz QR.");
+        return false;
       }
     } catch {
       // not JSON
@@ -288,6 +283,7 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs select-none"
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Scan Friend's Battle QR"

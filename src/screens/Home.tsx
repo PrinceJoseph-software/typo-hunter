@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Discovery } from '../db/database';
+import { FullImage } from '../components/FullImage';
 import { ROTATING_PROMPTS } from '../utils/constants';
 import { IconCamera, IconTrophy, IconSwords, IconGraduationCap } from '../components/Icons';
 
@@ -90,12 +91,12 @@ export const Home: React.FC<HomeProps> = ({
           <div className="flex gap-2 text-right">
             <div className="bg-[#FFFDF9] border-2 border-black rounded-lg px-3 py-1.5 shadow-brutal-sm text-center">
               <span className="block text-xl font-bold font-heading leading-none">{discoveries.length}</span>
-              <span className="text-[9px] font-mono uppercase text-gray-500 font-bold">Specimens</span>
+              <span className="text-[10px] font-mono uppercase text-gray-500 font-bold">Specimens</span>
             </div>
             {hofCount > 0 && (
               <div className="bg-[#E8B92D] border-2 border-black rounded-lg px-2.5 py-1.5 shadow-brutal-sm text-center">
                 <span className="block text-xl font-bold font-heading leading-none">{hofCount}</span>
-                <span className="text-[9px] font-mono uppercase text-black font-bold">Legends</span>
+                <span className="text-[10px] font-mono uppercase text-black font-bold">Legends</span>
               </div>
             )}
           </div>
@@ -138,7 +139,7 @@ export const Home: React.FC<HomeProps> = ({
           <div className="editorial-card p-4 rounded-2xl bg-[#FFFDF9] border-2 border-black shadow-brutal-sm flex items-center justify-between">
             <div className="pr-3">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="bg-[#D66A4A] text-white text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase">
+                <span className="bg-[#D66A4A] text-white text-[10px] font-mono font-bold px-1.5 py-0.2 rounded uppercase">
                   P2P Multiplayer
                 </span>
                 <span className="text-[10px] font-mono font-bold text-gray-500">
@@ -169,7 +170,7 @@ export const Home: React.FC<HomeProps> = ({
           <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] border-2 border-black shadow-brutal-sm flex items-center justify-between">
             <div className="pr-3">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1.5 py-0.2 rounded uppercase">
+                <span className="bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-1.5 py-0.2 rounded uppercase">
                   Classroom Suite
                 </span>
                 <span className="text-[10px] font-mono font-bold text-gray-500">
@@ -242,8 +243,8 @@ export const Home: React.FC<HomeProps> = ({
             aria-label={`View specimen ${latest.title}`}
           >
             <div className="h-64 sm:h-72 bg-[#1C1A17] overflow-hidden relative flex items-center justify-center">
-              <img
-                src={latest.image || latest.thumbnail}
+              <FullImage
+                discovery={latest}
                 alt={latest.title}
                 className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-200"
               />
@@ -325,7 +326,7 @@ export const Home: React.FC<HomeProps> = ({
               >
                 <div className="h-24 bg-[#1C1A17] overflow-hidden relative">
                   <img src={item.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                  <span className="absolute bottom-1 left-1 bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1 rounded">
+                  <span className="absolute bottom-1 left-1 bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-1 rounded">
                     #{item.discoveryNumber}
                   </span>
                 </div>
@@ -333,7 +334,7 @@ export const Home: React.FC<HomeProps> = ({
                   <h4 className="font-heading font-bold text-xs truncate group-hover:text-[#D66A4A]">
                     {item.title}
                   </h4>
-                  <span className="text-[9px] text-gray-500 uppercase tracking-wider block mt-1 truncate">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider block mt-1 truncate">
                     {item.category}
                   </span>
                 </div>
@@ -363,10 +364,10 @@ export const Home: React.FC<HomeProps> = ({
             </div>
             <div className="overflow-hidden min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[9px] font-mono font-bold text-[#82917B] uppercase tracking-wider">
+                <span className="text-[10px] font-mono font-bold text-[#82917B] uppercase tracking-wider">
                   Specimen #{String(randomDiscovery.discoveryNumber).padStart(3, '0')}
                 </span>
-                <span className="text-[9px] font-bold text-gray-400 font-mono">— {randomDiscovery.category}</span>
+                <span className="text-[10px] font-bold text-gray-400 font-mono">— {randomDiscovery.category}</span>
               </div>
               <h4 className="font-heading font-extrabold text-base truncate text-black group-hover:text-[#D66A4A] transition-colors">
                 {randomDiscovery.title}

@@ -1,15 +1,16 @@
 /**
  * @file dynamicFavicon.ts
- * @description Dynamic browser favicon morphing engine inspired by Duolingo's iconic
- * mascot states (Pristine -> Pleading -> Melting Meltdown) when inactive.
+ * @description Browser-tab mascot that changes on its own the longer you go without
+ * spotting a typo (Pristine -> Pleading -> Melting). Fully automatic: no settings.
  *
  * ARCHITECTURAL DESIGN:
  * - Offline-First & Client-Side: Generates zero-network SVG data URIs directly in-memory.
  * - Inactivity State Progression:
  *     1. Pristine / Active (< 24h): Crisp Hunter Yellow aperture emblem with red dot.
  *     2. Pleading / Sad (24h - 72h): Tilted pleading aperture with slanted brows, puppy eyes, and tear drop.
- *     3. Melting Meltdown (> 72h): Full unhinged Duolingo-style melting puddles, dripping base, and alert exclamation badge.
- * - Interactive Testing: Allows curators to manually test and preview each favicon in the browser tab.
+ *     3. Melting Meltdown (> 72h): Full melting puddles, dripping base, and alert exclamation badge.
+ * - Note: an installed app's home-screen icon comes from manifest.json and can't be
+ *   changed by a web app; the tab/window icon and in-app banner reflect the stage.
  */
 
 export type FaviconStage = 'pristine' | 'pleading' | 'melting';
@@ -77,7 +78,8 @@ export const FAVICON_SVGS: Record<FaviconStage, string> = {
 };
 
 const STORAGE_KEY_LAST_ACTIVE = 'typo_hunter_last_active_timestamp';
-const STORAGE_KEY_FAVICON_MODE = 'typo_hunter_favicon_mode'; // 'auto' | 'pristine' | 'pleading' | 'melting'
+/** Preview mode key used by older versions; cleared on read. */
+const STORAGE_KEY_FAVICON_MODE = 'typo_hunter_favicon_mode';
 
 export interface InactivityDetails {
   hoursInactive: number;
@@ -88,7 +90,7 @@ export interface InactivityDetails {
 }
 
 /**
- * Calculates current inactivity duration and maps to Duolingo-style stage.
+ * Calculates current inactivity duration and maps to a mascot stage.
  */
 export function getInactivityDetails(): InactivityDetails {
   if (typeof window === 'undefined') {
@@ -102,18 +104,8 @@ export function getInactivityDetails(): InactivityDetails {
   }
 
   const raw = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE);
-  const manualMode = localStorage.getItem(STORAGE_KEY_FAVICON_MODE);
-
-  if (manualMode && ['pristine', 'pleading', 'melting'].includes(manualMode)) {
-    const stage = manualMode as FaviconStage;
-    return {
-      hoursInactive: stage === 'melting' ? 76 : stage === 'pleading' ? 32 : 1,
-      stage,
-      lastActiveDate: raw ? new Date(parseInt(raw, 10)) : new Date(),
-      stageLabel: stage === 'melting' ? 'Melting Meltdown' : stage === 'pleading' ? 'Pleading Streak' : 'Pristine Curator',
-      stageDescription: stage === 'melting' ? 'Critical inactivity! Mascot has melted.' : stage === 'pleading' ? 'Neglected streak. Mascot is concerned.' : 'Active & hunting regularly.',
-    };
-  }
+  // The mascot is always automatic; clear any preview mode saved by older versions.
+  localStorage.removeItem(STORAGE_KEY_FAVICON_MODE);
 
   if (!raw) {
     return {
@@ -137,7 +129,7 @@ export function getInactivityDetails(): InactivityDetails {
   if (hoursInactive >= 72) {
     stage = 'melting';
     stageLabel = 'Melting Meltdown';
-    stageDescription = `Inactive for ${Math.floor(hoursInactive / 24)} days! Mascot has melted like Duolingo.`;
+    stageDescription = `Inactive for ${Math.floor(hoursInactive / 24)} days! Mascot has melted.`;
   } else if (hoursInactive >= 24) {
     stage = 'pleading';
     stageLabel = 'Pleading Streak';
@@ -175,36 +167,55 @@ export function setBrowserFavicon(stage: FaviconStage): void {
   link.href = dataUri;
 }
 
+/** Mirrors the last-capture time into IndexedDB so the service worker can read it for reminders. */
+function mirrorToServiceWorkerStore(ts: number): void {
+  import('../db/database')
+    .then(({ dbService }) => dbService.setMeta('lastCaptureAt', ts))
+    .catch(() => {});
+}
+
 /**
- * Records user activity, refreshes the last active timestamp, and resets favicon to pristine.
- * Returns true if the user was returning from a long absence (> 24 hours).
+ * Call when the user saves a new typo. Inactivity (favicon stage, reminders,
+ * welcome-back banner) is measured from the last capture, not from opening the app.
+ */
+export function recordCaptureActivity(): void {
+  if (typeof window === 'undefined') return;
+  const now = Date.now();
+  localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, now.toString());
+  mirrorToServiceWorkerStore(now);
+  setBrowserFavicon('pristine');
+}
+
+/**
+ * Called once on app start. Does NOT reset the inactivity clock (only a capture does),
+ * so the favicon and reminders can actually reach their later stages.
+ * Returns whether to show the welcome-back banner (at most once per browser session).
  */
 export function recordCuratorActivity(): { wasReturning: boolean; hoursInactive: number } {
   if (typeof window === 'undefined') return { wasReturning: false, hoursInactive: 0 };
 
   const raw = localStorage.getItem(STORAGE_KEY_LAST_ACTIVE);
-  let wasReturning = false;
-  let hoursInactive = 0;
-
-  if (raw) {
-    const lastActive = parseInt(raw, 10);
-    const diffMs = Date.now() - lastActive;
-    hoursInactive = Math.floor(diffMs / (1000 * 60 * 60));
-    if (hoursInactive >= 24) {
-      wasReturning = true;
-    }
+  if (!raw) {
+    // First run: start the clock now so a new user begins "pristine".
+    const now = Date.now();
+    localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, now.toString());
+    mirrorToServiceWorkerStore(now);
+    return { wasReturning: false, hoursInactive: 0 };
   }
 
-  // Update timestamp
-  localStorage.setItem(STORAGE_KEY_LAST_ACTIVE, Date.now().toString());
+  const lastActive = parseInt(raw, 10);
+  mirrorToServiceWorkerStore(lastActive);
+  const hoursInactive = Math.max(0, Math.floor((Date.now() - lastActive) / (1000 * 60 * 60)));
 
-  // Only auto-reset favicon if not locked into manual test mode
-  const manualMode = localStorage.getItem(STORAGE_KEY_FAVICON_MODE);
-  if (!manualMode || manualMode === 'auto') {
-    setBrowserFavicon('pristine');
+  let alreadyShown = false;
+  try {
+    alreadyShown = sessionStorage.getItem('typo_hunter_welcome_shown') === '1';
+    sessionStorage.setItem('typo_hunter_welcome_shown', '1');
+  } catch {
+    // ignore
   }
 
-  return { wasReturning, hoursInactive };
+  return { wasReturning: hoursInactive >= 24 && !alreadyShown, hoursInactive };
 }
 
 /**
@@ -214,19 +225,4 @@ export function syncFaviconWithInactivity(): FaviconStage {
   const details = getInactivityDetails();
   setBrowserFavicon(details.stage);
   return details.stage;
-}
-
-/**
- * Allows the user in Settings to test/preview a specific favicon state.
- */
-export function setManualFaviconPreview(stage: FaviconStage | 'auto'): void {
-  if (typeof window === 'undefined') return;
-
-  if (stage === 'auto') {
-    localStorage.removeItem(STORAGE_KEY_FAVICON_MODE);
-    syncFaviconWithInactivity();
-  } else {
-    localStorage.setItem(STORAGE_KEY_FAVICON_MODE, stage);
-    setBrowserFavicon(stage);
-  }
 }

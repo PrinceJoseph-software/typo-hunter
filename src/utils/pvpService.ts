@@ -68,10 +68,25 @@ export interface SpeedBlitzPayload {
   hostName: string;
   hostTeam: string;
   hostTeamTag: string;
-  hostScore: number;
+  hostDeviceId?: string;
+  /** Legacy field from older versions (host's lifetime total). Ignored: both players start at 0. */
+  hostScore?: number;
   durationMinutes: number;
   timestamp: string;
   signature: string;
+}
+
+/** Shown by each player when a Speed Blitz ends; the rival scans it to settle the match. */
+export interface BlitzResultPayload {
+  app: 'TYPO_HUNTER_PVP';
+  action: 'BLITZ_RESULT';
+  battleId: string;
+  deviceId: string;
+  hunter: string;
+  teamTag: string;
+  score: number;
+  specimens: number;
+  finishedAt: string;
 }
 
 export interface PvpMatchRecord {
@@ -105,6 +120,8 @@ export interface SquadMember {
   passFingerprint?: string;
   /** True when this hunter joined by scanning a real QR pass (or is the host device). */
   verified?: boolean;
+  /** Install id from the hunter's pass; the reliable way to spot the same person twice. */
+  deviceId?: string;
 }
 
 /** Squad battle roster rules: every hunter must join via QR; one side needs 3+. */
@@ -140,6 +157,7 @@ export interface SquadBattleResult {
 }
 
 const STORAGE_KEY_TEAM = 'typo_hunter_team';
+const STORAGE_KEY_SETTLED_BLITZ = 'typo_hunter_settled_blitz_ids';
 const STORAGE_KEY_MATCHES = 'typo_hunter_pvp_matches';
 
 export const pvpService = {
@@ -246,52 +264,7 @@ export const pvpService = {
     return match;
   },
 
-  /**
-   * Resolves a completed time-based speed hunt.
-   */
-  resolveTimedHunt(
-    playerNickname: string,
-    durationMinutes: number,
-    earnedScore: number,
-    specimensCataloged: number,
-    targetScore: number
-  ): PvpMatchRecord {
-    const currentTeam = this.getCurrentTeam();
-    let outcome: 'VICTORY' | 'DEFEAT' | 'DRAW' = 'DRAW';
-    if (earnedScore >= targetScore) outcome = 'VICTORY';
-    else outcome = 'DEFEAT';
-
-    const pointsDelta = earnedScore - targetScore;
-    const timestamp = new Date().toISOString();
-    const verificationHash = `TIMER-${durationMinutes}M-${Date.now().toString(36).toUpperCase()}`;
-
-    const match: PvpMatchRecord = {
-      id: `hunt_${Date.now()}`,
-      timestamp,
-      battleType: 'timed_hunt',
-      durationMinutes,
-      playerNickname: playerNickname || 'Hunter',
-      playerTeam: currentTeam.name,
-      playerScore: earnedScore,
-      playerSpecimens: specimensCataloged,
-      playerLegends: 0,
-      opponentName: `${durationMinutes}-Minute Benchmark Target`,
-      opponentTeam: 'Clock Challenge',
-      opponentScore: targetScore,
-      outcome,
-      pointsDelta,
-      verificationHash,
-    };
-
-    this.saveMatch(match);
-    return match;
-  },
-
-  createSpeedBlitzPayload(
-    hostName: string,
-    durationMinutes: number,
-    currentPoints: number
-  ): SpeedBlitzPayload {
+  createSpeedBlitzPayload(hostName: string, durationMinutes: number, hostDeviceId: string): SpeedBlitzPayload {
     const team = this.getCurrentTeam();
     const timestamp = new Date().toISOString();
     const battleId = `blitz_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -304,7 +277,7 @@ export const pvpService = {
       hostName: hostName.trim() || 'Hunter',
       hostTeam: team.name,
       hostTeamTag: team.tag,
-      hostScore: currentPoints,
+      hostDeviceId,
       durationMinutes,
       timestamp,
       signature,
@@ -329,6 +302,76 @@ export const pvpService = {
     }
   },
 
+  createBlitzResultPayload(battleId: string, deviceId: string, hunter: string, score: number, specimens: number): BlitzResultPayload {
+    return {
+      app: 'TYPO_HUNTER_PVP',
+      action: 'BLITZ_RESULT',
+      battleId,
+      deviceId,
+      hunter: hunter.trim() || 'Hunter',
+      teamTag: this.getCurrentTeam().tag,
+      score: Math.max(0, Math.round(score)),
+      specimens: Math.max(0, Math.round(specimens)),
+      finishedAt: new Date().toISOString(),
+    };
+  },
+
+  parseBlitzResultPayload(raw: string): BlitzResultPayload | null {
+    try {
+      const p = JSON.parse(raw);
+      if (
+        p && p.app === 'TYPO_HUNTER_PVP' && p.action === 'BLITZ_RESULT' &&
+        typeof p.battleId === 'string' && typeof p.deviceId === 'string' &&
+        typeof p.hunter === 'string' && typeof p.score === 'number'
+      ) {
+        return p as BlitzResultPayload;
+      }
+    } catch {
+      // not JSON
+    }
+    return null;
+  },
+
+  isBlitzSettled(battleId: string): boolean {
+    try {
+      const ids: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY_SETTLED_BLITZ) || '[]');
+      return ids.includes(battleId);
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Settles a Speed Blitz from both players' result QRs. Both started at 0 and only
+   * counted photos taken during their round. Each battle can be recorded once.
+   */
+  settleBlitz(mine: BlitzResultPayload, rival: BlitzResultPayload): { record?: PvpMatchRecord; error?: string } {
+    if (mine.battleId !== rival.battleId) {
+      return { error: "That result is from a different Speed Blitz. Ask your rival to show the result from this round." };
+    }
+    if (mine.deviceId === rival.deviceId) {
+      return { error: "That's your own result. Scan your rival's screen." };
+    }
+    if (this.isBlitzSettled(mine.battleId)) {
+      return { error: 'This Speed Blitz was already settled.' };
+    }
+    const record = this.resolveDuel(mine.hunter, mine.score, mine.specimens, 0, rival.hunter, `[${rival.teamTag}]`, rival.score);
+    const updated: PvpMatchRecord = { ...record, battleType: 'timed_hunt' };
+    const history = this.getMatchHistory();
+    if (history[0]?.id === record.id) {
+      history[0] = updated;
+      localStorage.setItem(STORAGE_KEY_MATCHES, JSON.stringify(history));
+    }
+    try {
+      const ids: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY_SETTLED_BLITZ) || '[]');
+      ids.unshift(mine.battleId);
+      localStorage.setItem(STORAGE_KEY_SETTLED_BLITZ, JSON.stringify(ids.slice(0, 100)));
+    } catch {
+      // ignore
+    }
+    return { record: updated };
+  },
+
   createSquadMember(data: Partial<SquadMember>): SquadMember {
     const id = data.id || `member_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const team = data.teamTag 
@@ -345,6 +388,7 @@ export const pvpService = {
       isHost: !!data.isHost,
       passFingerprint: data.passFingerprint,
       verified: !!data.verified || !!data.isHost,
+      deviceId: data.deviceId,
     };
   },
 
@@ -376,11 +420,20 @@ export const pvpService = {
     return `${hunter.trim().toLowerCase()}::${checksum || 'nochecksum'}`;
   },
 
-  /** Returns the name of the roster that already contains this hunter, or null. */
-  findDuplicateHunter(teamA: SquadMember[], teamB: SquadMember[], hunter: string, fingerprint: string): 'Team Alpha' | 'Team Omega' | null {
+  /**
+   * Returns the roster that already contains this hunter, or null. Matches on device id
+   * (names aren't unique: two different players called "Hunter" may both join). Passes from
+   * older app versions without a device id fall back to the exact pass fingerprint.
+   */
+  findDuplicateHunter(
+    teamA: SquadMember[],
+    teamB: SquadMember[],
+    _hunter: string,
+    fingerprint: string,
+    deviceId?: string
+  ): 'Team Alpha' | 'Team Omega' | null {
     const match = (m: SquadMember) =>
-      m.nickname.trim().toLowerCase() === hunter.trim().toLowerCase() ||
-      (!!m.passFingerprint && m.passFingerprint === fingerprint);
+      deviceId && m.deviceId ? m.deviceId === deviceId : !!m.passFingerprint && m.passFingerprint === fingerprint;
     if (teamA.some(match)) return 'Team Alpha';
     if (teamB.some(match)) return 'Team Omega';
     return null;

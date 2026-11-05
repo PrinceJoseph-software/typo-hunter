@@ -23,14 +23,68 @@
  */
 
 export interface ProcessedImageResult {
-  /** High-resolution compressed image Data URL suitable for detail inspection and canvas share exports */
-  image: string;
+  /** High-resolution compressed JPEG (stored as a Blob, ~25% smaller than a data URL) */
+  imageBlob: Blob;
   /** Lightweight low-footprint thumbnail Data URL optimized for rapid grid virtual lists */
   thumbnail: string;
   /** Original image width in pixels */
   width: number;
   /** Original image height in pixels */
   height: number;
+  /** 64-bit perceptual difference hash (16 hex chars) for duplicate-photo detection */
+  hash: string;
+}
+
+/**
+ * Computes a 64-bit difference hash (dHash): the image is shrunk to 9x8 grayscale
+ * and each bit records whether a pixel is brighter than its right neighbour.
+ * Re-saved, re-compressed or slightly resized copies of a photo give near-identical hashes.
+ */
+export function computeDifferenceHash(source: CanvasImageSource): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 9;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return '';
+  ctx.drawImage(source, 0, 0, 9, 8);
+  const { data } = ctx.getImageData(0, 0, 9, 8);
+  let bits = '';
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const i = (y * 9 + x) * 4;
+      const j = i + 4;
+      const left = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      const right = data[j] * 0.299 + data[j + 1] * 0.587 + data[j + 2] * 0.114;
+      bits += left > right ? '1' : '0';
+    }
+  }
+  let hex = '';
+  for (let k = 0; k < 64; k += 4) hex += parseInt(bits.slice(k, k + 4), 2).toString(16);
+  return hex;
+}
+
+/** Number of differing bits between two 16-hex-char hashes (64 = completely different). */
+export function hashDistance(a: string, b: string): number {
+  if (!a || !b || a.length !== b.length) return 64;
+  let dist = 0;
+  for (let i = 0; i < a.length; i++) {
+    let x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+    while (x) {
+      dist += x & 1;
+      x >>= 1;
+    }
+  }
+  return dist;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      blob => (blob ? resolve(blob) : reject(new Error('Canvas could not be encoded as JPEG.'))),
+      'image/jpeg',
+      quality
+    );
+  });
 }
 
 export interface CompressionOptions {
@@ -97,7 +151,7 @@ export async function compressImage(
     const blobUrl = URL.createObjectURL(fileOrBlob);
     const img = new Image();
 
-    img.onload = () => {
+    img.onload = async () => {
       // Free object URL immediately once decoded into browser memory
       URL.revokeObjectURL(blobUrl);
 
@@ -127,7 +181,7 @@ export async function compressImage(
         primaryCtx.fillRect(0, 0, primaryDim.width, primaryDim.height);
         primaryCtx.drawImage(img, 0, 0, primaryDim.width, primaryDim.height);
 
-        const primaryDataUrl = primaryCanvas.toDataURL('image/jpeg', primaryQuality);
+        const primaryBlob = await canvasToBlob(primaryCanvas, primaryQuality);
 
         // --- Step 2: Render Specimen Thumbnail ---
         const thumbDim = calculateAspectRatioFit(srcWidth, srcHeight, maxThumbDimension);
@@ -147,6 +201,7 @@ export async function compressImage(
         thumbCtx.drawImage(img, 0, 0, thumbDim.width, thumbDim.height);
 
         const thumbDataUrl = thumbCanvas.toDataURL('image/jpeg', thumbQuality);
+        const hash = computeDifferenceHash(thumbCanvas);
 
         // Explicitly tear down canvas buffers to hint garbage collector
         primaryCanvas.width = 0;
@@ -155,10 +210,11 @@ export async function compressImage(
         thumbCanvas.height = 0;
 
         resolve({
-          image: primaryDataUrl,
+          imageBlob: primaryBlob,
           thumbnail: thumbDataUrl,
           width: srcWidth,
           height: srcHeight,
+          hash,
         });
       } catch (err) {
         reject(new Error(`Canvas compression pipeline failure: ${(err as Error).message}`));

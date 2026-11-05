@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import QRCode from 'qrcode';
 import { Discovery } from '../db/database';
 import {
@@ -23,7 +24,10 @@ import {
 } from '../utils/teacherService';
 import { pvpService, SquadBattleResult, SQUAD_RULES } from '../utils/pvpService';
 import { BattleQrScannerModal } from './BattleQrScannerModal';
-import { verifyAndUnpackArchive } from '../utils/archiveSecurity';
+import { downloadBlob } from '../utils/archiveSecurity';
+import { useHunterPoints } from '../hooks/useHunterPoints';
+import { isDefaultNickname } from '../utils/identity';
+import { calculateSpecimenScore } from '../utils/proofOfSighting';
 import {
   IconClose,
   IconGraduationCap,
@@ -45,6 +49,8 @@ interface TeacherModeModalProps {
   discoveries: Discovery[];
   /** Called on a STUDENT device after scanning the teacher's Master QR. */
   onClassJoined?: (expedition: ClassExpedition) => void;
+  /** Students must set a real name before joining a class. */
+  onUpdateNickname?: (name: string) => void;
 }
 
 export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
@@ -53,7 +59,20 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
   nickname,
   discoveries,
   onClassJoined,
+  onUpdateNickname,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
+  const lifetimePoints = useHunterPoints();
+  const [nameDraft, setNameDraft] = useState('');
+  const needsName = isDefaultNickname(nickname);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, [isOpen]);
   const [activeTab, setActiveTab] = useState<'dispatch' | 'gradebook' | 'squads' | 'student'>('dispatch');
   const [instructorName, setInstructorName] = useState(() => teacherService.getTeacherProfile().instructorName);
   const [className, setClassName] = useState(() => teacherService.getTeacherProfile().defaultClassName);
@@ -105,7 +124,8 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
         nickname,
         pvpService.getCurrentTeam().tag,
         discoveries,
-        joinedClass?.classId
+        joinedClass,
+        lifetimePoints
       );
       QRCode.toDataURL(JSON.stringify(payload), {
         errorCorrectionLevel: 'M',
@@ -116,7 +136,32 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
         .then(url => setStudentSubmissionQr(url))
         .catch(() => {});
     }
-  }, [activeTab, nickname, discoveries, joinedClass]);
+  }, [activeTab, nickname, discoveries, joinedClass, lifetimePoints]);
+
+  const sessionEntries = joinedClass ? teacherService.selectSessionEntries(discoveries, joinedClass) : [];
+  const sessionPoints = sessionEntries.reduce((sum, d) => sum + calculateSpecimenScore(d).totalPoints, 0);
+  const minutesLeft = (exp: ClassExpedition | null) => {
+    if (!exp) return null;
+    return Math.ceil((teacherService.getClassWindow(exp).end - now) / 60000);
+  };
+
+  const handleSaveReviewFile = async () => {
+    if (!joinedClass) return;
+    const file = teacherService.createClassReviewFile(nickname, pvpService.getCurrentTeam().tag, discoveries, joinedClass);
+    const blob = new Blob([JSON.stringify(file)], { type: 'application/json' });
+    const filename = `typo-hunter-review-${file.studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}-${joinedClass.classId}.json`;
+    try {
+      const shareFile = new File([blob], filename, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+        await navigator.share({ files: [shareFile], title: `Typo Hunter review: ${file.studentName}` });
+        return;
+      }
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return;
+    }
+    downloadBlob(blob, filename);
+    flash(`Saved your review file (${file.entries.length} photo${file.entries.length === 1 ? '' : 's'}). Send it to your teacher.`);
+  };
 
   // Once a class is live the QR encodes THAT class (stable classId), so every
   // student who scans joins the same session the teacher is grading.
@@ -173,15 +218,20 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
 
   // ---- Teacher: scan student QRs into the roster ----
   const ingestScannedStudent = (entry: StudentSubmission) => {
-    teacherService.saveStudentToGradebook(entry);
+    const { keptReview } = teacherService.saveStudentToGradebook(entry);
     setGradebook(teacherService.getClassGradebook());
     setActiveTab('gradebook');
+    if (keptReview) {
+      flash(`${entry.studentName}'s photos were already reviewed, so their reviewed score was kept.`);
+      return;
+    }
     const warnings = [
-      !entry.tamperVerified ? 'checksum NOT verified' : null,
       entry.classMatch === false ? 'submitted for a different class' : null,
+      !entry.deviceId ? 'older app version: ask them to update' : null,
     ].filter(Boolean);
     flash(
-      `${entry.studentName} added (${entry.points} pts, ${entry.grade})${warnings.length ? ` — ${warnings.join(', ')}` : ''}.`
+      `${entry.studentName} added: ${entry.points} pts (self-reported). For a trustworthy grade, import their review file${warnings.length ? `. Note: ${warnings.join(', ')}` : ''}.`,
+      6000
     );
   };
 
@@ -197,6 +247,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
           legends: payload.legends,
           checksum: payload.checksum,
           classId: payload.classId,
+          deviceId: payload.deviceId,
           kind: 'qr_submission',
         },
         activeExpedition
@@ -211,6 +262,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
     legends: number;
     teamTag?: string;
     checksum?: string;
+    deviceId?: string;
   }) => {
     setScannerPurpose(null);
     ingestScannedStudent(
@@ -222,6 +274,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
           specimens: pass.specimens,
           legends: pass.legends,
           checksum: pass.checksum,
+          deviceId: pass.deviceId,
           kind: 'qr_pass',
         },
         activeExpedition
@@ -300,73 +353,64 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
     setClassBattleResult(result);
   };
 
-  // Import student signed JSON archive directly into teacher gradebook
-  const handleImportStudentArchive = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Import a student's class review file: their photos from this class, for approval.
+  const handleImportReviewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const result = await verifyAndUnpackArchive(text);
-
-        if (!result.isValid) {
-          setFeedback(
-            result.isTampered
-              ? 'SECURITY REJECTION: Student archive checksum mismatch. Tampering detected!'
-              : 'Error: Invalid archive format.'
-          );
-          setTimeout(() => setFeedback(null), 5000);
-          return;
-        }
-
-        const studentName = result.hunterName || 'Unknown Student';
-        const totalPoints = typeof result.totalPoints === 'number' ? result.totalPoints : result.discoveries.length * 60;
-        const specimenCount = result.discoveries.length;
-        const legendCount = result.discoveries.filter(d => d.isHallOfFame).length;
-        const { grade, status } = teacherService.calculateGrade(totalPoints, targetPoints);
-
-        const newSubmission: StudentSubmission = {
-          id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          studentName,
-          squadFaction: 'SYN',
-          classId: activeExpedition?.classId || 'INDEPENDENT',
-          points: totalPoints,
-          specimensCataloged: specimenCount,
-          legendsEnshrined: legendCount,
-          grade,
-          status,
-          tamperVerified: true,
-          antiCheatHash: 'SIG-VERIFIED-SHA256',
-          submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          source: 'archive',
-          specimenTitles: result.discoveries.map(d => d.title).filter(Boolean).slice(0, 50),
-        };
-
-        teacherService.saveStudentToGradebook(newSubmission);
-        setGradebook(teacherService.getClassGradebook());
-        setFeedback(`Inducted student ${studentName} into gradebook (${totalPoints} pts, Grade: ${grade})!`);
-        setTimeout(() => setFeedback(null), 4000);
-      } catch {
-        setFeedback('Failed to read student archive.');
-        setTimeout(() => setFeedback(null), 3000);
-      }
-    };
-    reader.readAsText(file);
     e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const review = teacherService.parseClassReviewFile(String(reader.result || ''));
+      if (!review) {
+        flash("That isn't a Typo Hunter class review file. Ask the student to use 'Save review file' in the Student tab.", 5000);
+        return;
+      }
+      const submission = teacherService.submissionFromReviewFile(review, activeExpedition);
+      teacherService.saveStudentToGradebook(submission);
+      setGradebook(teacherService.getClassGradebook());
+      setActiveTab('gradebook');
+      const saved = teacherService.getClassGradebook().find(st => st.deviceId === submission.deviceId);
+      if (saved) setExpandedStudentId(saved.id);
+      const flagged = submission.evidence?.filter(ev => ev.flag).length || 0;
+      flash(
+        `${review.studentName}: ${review.entries.length} photo${review.entries.length === 1 ? '' : 's'} to review${flagged ? ` (${flagged} auto-flagged)` : ''}.` +
+          (submission.classMatch === false ? ' This file is from a different class.' : ''),
+        5000
+      );
+    };
+    reader.onerror = () => flash('Could not read that file.', 3000);
+    reader.readAsText(file);
   };
 
-  const handleAwardCommendation = (studentId: string) => {
-    const student = gradebook.find(s => s.id === studentId);
-    if (!student) return;
-    const updated = {
-      ...student,
-      points: student.points + 50,
-      teacherCommendation: 'Teacher Commendation (+50 pts for acute linguistic rigor)',
-    };
-    teacherService.saveStudentToGradebook(updated);
+  const updateStudent = (student: StudentSubmission) => {
+    const target = activeExpedition?.targetPoints || targetPoints;
+    teacherService.saveStudentToGradebook(teacherService.recomputeReviewedScore(student, target));
     setGradebook(teacherService.getClassGradebook());
+  };
+
+  const setEvidenceApproval = (student: StudentSubmission, evidenceId: string | 'ALL', approved: boolean) => {
+    updateStudent({
+      ...student,
+      evidence: (student.evidence || []).map(ev =>
+        evidenceId === 'ALL' ? (ev.flag && approved ? ev : { ...ev, approved }) : ev.id === evidenceId ? { ...ev, approved } : ev
+      ),
+    });
+  };
+
+  // One teacher bonus per student (+50), toggled, not stackable.
+  const handleAwardCommendation = (studentId: string) => {
+    const student = gradebook.find(st => st.id === studentId);
+    if (!student) return;
+    const giving = !student.teacherCommendation;
+    const base = { ...student, teacherCommendation: giving ? 'Teacher bonus (+50)' : undefined };
+    if (student.reviewStatus === 'reviewed') {
+      updateStudent(base);
+    } else {
+      const points = student.points + (giving ? 50 : -50);
+      const { grade, status } = teacherService.calculateGrade(points, activeExpedition?.targetPoints || targetPoints);
+      teacherService.saveStudentToGradebook({ ...base, points, grade, status });
+      setGradebook(teacherService.getClassGradebook());
+    }
   };
 
   const handleRemoveStudent = (id: string) => {
@@ -384,6 +428,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs select-none"
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Teacher Mode Terminal"
@@ -396,7 +441,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
               <span className="text-[10px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">
                 Classroom Overseer Suite
               </span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-black bg-black text-[#E8B92D]">
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border border-black bg-black text-[#E8B92D]">
                 TEACHER MODE
               </span>
             </div>
@@ -486,7 +531,10 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                     {activeExpedition.className}
                   </h3>
                   <p className="text-[11px] text-gray-300">
-                    Instructor: <strong>{activeExpedition.instructorName}</strong> · Time Limit: {activeExpedition.durationMinutes} mins
+                    Instructor: <strong>{activeExpedition.instructorName}</strong> · {(() => {
+                      const left = minutesLeft(activeExpedition);
+                      return left !== null && left > 0 ? `${left} min left` : 'Time is up: only photos taken during the class count';
+                    })()}
                   </p>
                   <p className="text-[11px] text-[#E8B92D] italic">
                     "{activeExpedition.objective}"
@@ -617,25 +665,25 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
               <div className="grid grid-cols-4 gap-2 text-center">
                 <div className="bg-white p-2.5 rounded-xl border border-black/20">
                   <span className="text-xl font-extrabold font-heading text-black block">{gradebook.length}</span>
-                  <span className="text-[8px] uppercase text-gray-500 font-bold block">Students</span>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block">Students</span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-black/20">
                   <span className="text-xl font-extrabold font-heading text-[#82917B] block">
                     {gradebook.length > 0 ? Math.round(gradebook.reduce((acc, s) => acc + s.points, 0) / gradebook.length) : 0}
                   </span>
-                  <span className="text-[8px] uppercase text-gray-500 font-bold block">Avg Pts</span>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block">Avg Pts</span>
                 </div>
                 <div className="bg-white p-2.5 rounded-xl border border-black/20">
                   <span className="text-xl font-extrabold font-heading text-[#D66A4A] block">
                     {gradebook.reduce((acc, s) => acc + s.specimensCataloged, 0)}
                   </span>
-                  <span className="text-[8px] uppercase text-gray-500 font-bold block">Typos Spotted</span>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block">Typos Spotted</span>
                 </div>
                 <div className="bg-[#FFF9EC] p-2.5 rounded-xl border border-black/20">
                   <span className="text-xl font-extrabold font-heading text-black block">
-                    {gradebook.filter(s => s.tamperVerified).length}/{gradebook.length}
+                    {gradebook.filter(s => s.reviewStatus === 'reviewed').length}/{gradebook.length}
                   </span>
-                  <span className="text-[8px] uppercase text-gray-500 font-bold block">Verified</span>
+                  <span className="text-[10px] uppercase text-gray-500 font-bold block">Photos reviewed</span>
                 </div>
               </div>
 
@@ -656,13 +704,13 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                     className="btn-secondary py-2 px-3 rounded-xl text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                   >
                     <IconDownload size={13} />
-                    <span>Import Student .json</span>
+                    <span>Import Review File</span>
                   </button>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".json"
-                    onChange={handleImportStudentArchive}
+                    accept=".json,application/json"
+                    onChange={handleImportReviewFile}
                     className="hidden"
                   />
                 </div>
@@ -692,7 +740,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-black bg-[#E8B92D] text-black">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-black bg-[#E8B92D] text-black">
                               [{student.squadFaction}]
                             </span>
                             <h4 className="font-heading font-extrabold text-sm text-black">
@@ -701,23 +749,25 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                             </h4>
                           </div>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {student.tamperVerified ? (
-                              <span className="text-[8px] font-bold px-1 rounded border border-[#82917B] text-[#2D5A27]">VERIFIED</span>
+                            {student.reviewStatus === 'reviewed' ? (
+                              <span className="text-[10px] font-bold px-1 rounded border border-[#82917B] text-[#2D5A27]">
+                                PHOTOS REVIEWED{(student.evidence || []).some(ev => ev.approved === null) ? ' · PENDING' : ''}
+                              </span>
                             ) : (
-                              <span className="text-[8px] font-bold px-1 rounded border border-[#D66A4A] text-[#D66A4A]">UNVERIFIED</span>
+                              <span className="text-[10px] font-bold px-1 rounded border border-[#D66A4A] text-[#D66A4A]">SELF-REPORTED</span>
                             )}
                             {student.classMatch === false && (
-                              <span className="text-[8px] font-bold px-1 rounded border border-[#D66A4A] text-[#D66A4A]">OTHER CLASS</span>
+                              <span className="text-[10px] font-bold px-1 rounded border border-[#D66A4A] text-[#D66A4A]">OTHER CLASS</span>
                             )}
                             {classSquads.alpha.includes(student.id) && (
-                              <span className="text-[8px] font-bold px-1 rounded bg-[#D66A4A] text-white">ALPHA</span>
+                              <span className="text-[10px] font-bold px-1 rounded bg-[#D66A4A] text-white">ALPHA</span>
                             )}
                             {classSquads.omega.includes(student.id) && (
-                              <span className="text-[8px] font-bold px-1 rounded bg-black text-[#E8B92D]">OMEGA</span>
+                              <span className="text-[10px] font-bold px-1 rounded bg-black text-[#E8B92D]">OMEGA</span>
                             )}
                           </div>
                           <p className="text-[10px] text-gray-500 mt-0.5">
-                            Hash: <code>{student.antiCheatHash}</code> · Submitted at {student.submittedAt}
+                            {student.deviceId ? `Device #${student.deviceId.slice(0, 4)} · ` : ''}Submitted at {student.submittedAt}
                           </p>
                         </div>
 
@@ -738,7 +788,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
 
                       <div className="flex justify-between items-center pt-1.5 border-t border-black/10 text-gray-700">
                         <div>
-                          <strong>{student.points} pts</strong> ({student.specimensCataloged} specimens, {student.legendsEnshrined} legends)
+                          <strong>{student.points} pts</strong> ({student.specimensCataloged} {student.reviewStatus === 'reviewed' ? 'approved photo' : 'photo'}{student.specimensCataloged === 1 ? '' : 's'})
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -748,7 +798,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                             title="Award teacher bonus +50 points"
                           >
                             <IconStar size={11} />
-                            <span>+50 Bonus</span>
+                            <span>{student.teacherCommendation ? 'Remove bonus' : '+50 Bonus'}</span>
                           </button>
                           <button
                             type="button"
@@ -771,19 +821,63 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                       </button>
 
                       {expandedStudentId === student.id && (
-                        <div className="bg-[#FAF6EE] p-2 rounded-lg border border-black/10 text-[10px] text-gray-700 space-y-1">
-                          <div>Class: <code>{student.classId}</code></div>
-                          <div>Joined via: {student.source === 'qr_submission' ? 'Submission QR' : student.source === 'qr_pass' ? 'Curator Pass QR' : 'Signed archive (.json)'}</div>
-                          <div>Avg per specimen: {student.specimensCataloged > 0 ? Math.round(student.points / student.specimensCataloged) : 0} pts</div>
-                          {student.specimenTitles && student.specimenTitles.length > 0 ? (
-                            <div>
-                              <span className="font-bold block">Specimens ({student.specimenTitles.length}):</span>
-                              <ul className="list-disc pl-4 max-h-28 overflow-y-auto">
-                                {student.specimenTitles.map((t, i) => <li key={i}>{t}</li>)}
+                        <div className="bg-[#FAF6EE] p-2 rounded-lg border border-black/10 text-[10px] text-gray-700 space-y-2">
+                          <div>
+                            Class: <code>{student.classId}</code> · Device: <code>{student.deviceId ? `#${student.deviceId.slice(0, 4)}` : 'unknown (older app)'}</code>
+                          </div>
+                          <div>
+                            Source: {student.source === 'qr_submission' ? 'Submission QR (self-reported)' : student.source === 'qr_pass' ? 'Curator Pass QR (self-reported)' : 'Class review file'}
+                          </div>
+                          {student.evidence && student.evidence.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold">
+                                  Photos ({student.evidence.filter(ev => ev.approved).length}/{student.evidence.length} approved)
+                                </span>
+                                <span className="flex gap-1">
+                                  <button type="button" onClick={() => setEvidenceApproval(student, 'ALL', true)} className="px-1.5 py-0.5 rounded border border-[#82917B] text-[#2D5A27] font-bold cursor-pointer">
+                                    Approve all unflagged
+                                  </button>
+                                </span>
+                              </div>
+                              <ul className="grid grid-cols-2 gap-1.5">
+                                {student.evidence.map(ev => (
+                                  <li key={ev.id} className="bg-white rounded-lg border border-black/15 p-1 text-left">
+                                    <img src={ev.thumbnail} alt={ev.title} className="w-full h-20 object-cover rounded" />
+                                    <div className="font-bold text-black truncate mt-0.5">{ev.title}</div>
+                                    {ev.originalWording && <div className="truncate">"{ev.originalWording}"</div>}
+                                    <div className="text-gray-500">
+                                      {new Date(ev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {ev.points} pts
+                                    </div>
+                                    {ev.flag && <div className="text-[#D66A4A] font-bold">{ev.flag}</div>}
+                                    <div className="flex gap-1 mt-1">
+                                      <button
+                                        type="button"
+                                        aria-pressed={ev.approved === true}
+                                        onClick={() => setEvidenceApproval(student, ev.id, true)}
+                                        className={`flex-1 rounded border text-[10px] font-bold py-0.5 cursor-pointer ${ev.approved === true ? 'bg-[#82917B] text-white border-black' : 'border-gray-300'}`}
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        type="button"
+                                        aria-pressed={ev.approved === false}
+                                        onClick={() => setEvidenceApproval(student, ev.id, false)}
+                                        className={`flex-1 rounded border text-[10px] font-bold py-0.5 cursor-pointer ${ev.approved === false ? 'bg-[#D66A4A] text-white border-black' : 'border-gray-300'}`}
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
                               </ul>
                             </div>
+                          ) : student.reviewStatus === 'reviewed' ? (
+                            <div className="italic text-gray-500">The review file had no photos from this class.</div>
                           ) : (
-                            <div className="italic text-gray-500">Ask the student for their signed archive (.json) to see every specimen.</div>
+                            <div className="italic text-gray-500">
+                              This score is self-reported and can't be checked. Ask the student for their review file (Student tab → Save review file) to see and approve each photo.
+                            </div>
                           )}
                         </div>
                       )}
@@ -805,7 +899,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                     Class Roster Empty
                   </h4>
                   <p className="text-xs text-gray-600 max-w-xs mx-auto leading-relaxed">
-                    Scan student submission QR codes or import their signed archive JSONs as they return from the linguistic expedition.
+                    Scan students' QR codes for a quick tally, or import their review files to see and approve the actual photos.
                   </p>
                   <div className="pt-2">
                     <button
@@ -903,7 +997,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                               disabled={!eligible}
                               onClick={() => assignStudent(student.id, opt)}
                               aria-pressed={side === opt}
-                              className={`py-1 px-2 rounded-md text-[9px] font-bold uppercase border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                              className={`py-1 px-2 rounded-md text-[10px] font-bold uppercase border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                                 side === opt
                                   ? opt === 'alpha'
                                     ? 'bg-[#D66A4A] text-white border-black'
@@ -925,14 +1019,14 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
 
               <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="bg-[#FFFDF9] p-2.5 rounded-xl border-2 border-black">
-                  <span className="text-[9px] font-bold uppercase text-[#D66A4A] block">Squad Alpha</span>
+                  <span className="text-[10px] font-bold uppercase text-[#D66A4A] block">Squad Alpha</span>
                   <span className="font-heading font-extrabold text-lg text-black block">{alphaMembers.length} students</span>
                   <span className="text-[10px] text-gray-600">
                     {pvpService.calculateSquadStats(alphaMembers).totalPoints} total · {pvpService.calculateSquadStats(alphaMembers).averagePoints} avg
                   </span>
                 </div>
                 <div className="bg-[#FFFDF9] p-2.5 rounded-xl border-2 border-black">
-                  <span className="text-[9px] font-bold uppercase text-black block">Squad Omega</span>
+                  <span className="text-[10px] font-bold uppercase text-black block">Squad Omega</span>
                   <span className="font-heading font-extrabold text-lg text-black block">{omegaMembers.length} students</span>
                   <span className="text-[10px] text-gray-600">
                     {pvpService.calculateSquadStats(omegaMembers).totalPoints} total · {pvpService.calculateSquadStats(omegaMembers).averagePoints} avg
@@ -956,7 +1050,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                     {classBattleResult.teamA.members.length} vs {classBattleResult.teamB.members.length} ·{' '}
                     {classBattleResult.scoringMode === 'average' ? 'Average' : 'Total'} scoring · margin {Math.abs(classBattleResult.pointsDelta)} pts
                   </p>
-                  <span className="text-[9px] text-gray-500 block">Ledger: <code>{classBattleResult.verificationHash}</code></span>
+                  <span className="text-[10px] text-gray-500 block">Ledger: <code>{classBattleResult.verificationHash}</code></span>
                 </div>
               )}
 
@@ -975,12 +1069,51 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
           {/* TAB 4: STUDENT SIDE — JOIN CLASS + SUBMISSION QR */}
           {activeTab === 'student' && (
             <div className="space-y-4 font-mono text-xs text-center">
+              {needsName && (
+                <form
+                  className="bg-white border-2 border-[#D66A4A] rounded-2xl p-4 space-y-2 text-left"
+                  onSubmit={e => {
+                    e.preventDefault();
+                    const name = nameDraft.trim();
+                    if (!name || isDefaultNickname(name)) return;
+                    localStorage.setItem('typo_hunter_nickname', name);
+                    onUpdateNickname?.(name);
+                    setNameDraft('');
+                  }}
+                >
+                  <label htmlFor="student-name" className="text-[11px] font-bold uppercase text-[#D66A4A] block">
+                    First, enter your real name
+                  </label>
+                  <p className="text-[11px] text-gray-600">Your teacher needs it to tell you apart from classmates.</p>
+                  <div className="flex gap-2">
+                    <input
+                      id="student-name"
+                      value={nameDraft}
+                      onChange={e => setNameDraft(e.target.value)}
+                      maxLength={30}
+                      placeholder="e.g. Ada O."
+                      className="flex-1 p-2 border-2 border-black rounded-xl text-xs font-bold"
+                    />
+                    <button type="submit" className="btn-primary px-3 rounded-xl text-[11px] font-bold uppercase cursor-pointer" disabled={!nameDraft.trim() || isDefaultNickname(nameDraft)}>
+                      Save
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {joinedClass ? (
                 <div className="bg-[#282722] text-white p-3.5 rounded-2xl border-2 border-black text-left space-y-1">
                   <span className="text-[10px] uppercase font-bold text-[#E8B92D] block">You're in class</span>
                   <h4 className="font-heading font-extrabold text-sm">{joinedClass.className}</h4>
                   <p className="text-[11px] text-gray-300">
-                    {joinedClass.instructorName} · Target {joinedClass.targetPoints} pts · {joinedClass.durationMinutes} min
+                    {joinedClass.instructorName} · Target {joinedClass.targetPoints} pts ·{' '}
+                    {(() => {
+                      const left = minutesLeft(joinedClass);
+                      return left !== null && left > 0 ? `${left} min left` : 'time is up';
+                    })()}
+                  </p>
+                  <p className="text-[11px] text-[#E8B92D]">
+                    This class so far: {sessionEntries.length} photo{sessionEntries.length === 1 ? '' : 's'} · {sessionPoints} pts. Only photos you take during the class count.
                   </p>
                   <div className="flex gap-2 pt-1">
                     <button
@@ -1006,7 +1139,8 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setScannerPurpose('join')}
-                    className="w-full btn-primary py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
+                    disabled={needsName}
+                    className="w-full btn-primary py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <IconCamera size={14} />
                     <span>Scan Teacher's Class QR</span>
@@ -1016,7 +1150,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
 
               <div className="bg-[#FFFDF9] border-2 border-black rounded-2xl p-5 space-y-3 shadow-brutal-sm">
                 <span className="text-[10px] font-bold uppercase text-[#D66A4A] tracking-wider block">
-                  Step 2 · Show this to your teacher
+                  Step 2 · Hand in your work
                 </span>
                 {studentSubmissionQr ? (
                   <div className="inline-block p-3 bg-white border-2 border-black rounded-2xl shadow-brutal-sm">
@@ -1032,9 +1166,26 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                     {nickname || 'Hunter'} · Submission Pass
                   </h4>
                   <p className="text-[11px] text-gray-600 mt-0.5">
-                    Present this optical QR code to your instructor to register your {discoveries.length} specimens directly into the class gradebook.
+                    {joinedClass
+                      ? `Quick tally: ${sessionEntries.length} photos, ${sessionPoints} pts from this class. Your teacher scans it.`
+                      : `Quick tally of your ${lifetimePoints} locked points. Your teacher scans it.`}
                   </p>
                 </div>
+                {joinedClass && (
+                  <div className="pt-2 border-t border-black/10 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={handleSaveReviewFile}
+                      className="w-full btn-primary py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <IconDownload size={14} />
+                      <span>Save Review File ({sessionEntries.length} photos)</span>
+                    </button>
+                    <p className="text-[11px] text-gray-600">
+                      Send this file to your teacher (AirDrop, Nearby Share, email, USB…). It contains the photos from this class so your teacher can check and approve them. That's what your grade is based on.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -14,7 +14,7 @@ import { PvpMatchRecord } from './pvpService';
  *       2. Falls back cleanly to direct programmatic `<a download="...">` binary file export on desktop browsers.
  */
 
-import { Discovery } from '../db/database';
+import { Discovery, dbService } from '../db/database';
 
 /**
  * Wraps text cleanly across multiple lines within a maximum pixel width constraint.
@@ -51,6 +51,10 @@ function wrapCanvasText(
  * @returns Promise resolving to a binary JPEG Blob
  */
 export async function generateShareCardBlob(discovery: Discovery): Promise<Blob> {
+  // Full-size images live in their own store; fall back to the thumbnail.
+  const fullBlob = await dbService.getImage(discovery.id).catch(() => undefined);
+  const fullImageUrl = fullBlob ? URL.createObjectURL(fullBlob) : null;
+  const imageSrc = fullImageUrl || discovery.thumbnail;
   // Ensure custom web fonts (Space Grotesk & Courier Prime) are loaded in the browser
   if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
     try {
@@ -126,8 +130,9 @@ export async function generateShareCardBlob(discovery: Discovery): Promise<Blob>
       resolve();
     };
     img.onerror = () => resolve();
-    img.src = discovery.image;
+    img.src = imageSrc;
   });
+  if (fullImageUrl) URL.revokeObjectURL(fullImageUrl);
 
   // --- Step 4: Typography Dossier Container ---
   const boxY = 835;

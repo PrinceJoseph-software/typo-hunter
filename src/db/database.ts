@@ -16,6 +16,7 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { CATEGORIES } from '../utils/constants';
 
 /**
  * Core domain entity representing an archived typographical specimen.
@@ -25,8 +26,12 @@ export interface Discovery {
   id: string;
   /** Monotonically increasing human-readable specimen serial (e.g. #001, #002) */
   discoveryNumber: number;
-  /** Primary compressed photographic payload (base64 data URL or blob) */
-  image: string;
+  /**
+   * Legacy only: full image as a data URL. Since DB v3 full images live in the
+   * separate `images` store as Blobs (see dbService.getImage) so lists never load them.
+   * Present transiently on imported records before they are saved.
+   */
+  image?: string;
   /** Lightweight photographic thumbnail (~20KB) for rapid grid rendering */
   thumbnail: string;
   /** User-assigned descriptive title */
@@ -49,6 +54,16 @@ export interface Discovery {
   isHallOfFame: boolean;
   /** Curatorial funniness score from 1 (mildly amusing) to 5 (absolute legend) */
   rating: number;
+  /** True when the photo file was created within minutes of saving (camera, not an old gallery pick). Heuristic. */
+  capturedFresh?: boolean;
+  /** 64-bit perceptual hash (16 hex chars) of the photo, used to detect re-used photos. */
+  imageHash?: string;
+  /** Id of an earlier scored entry with (nearly) the same photo. Such entries earn no points. */
+  duplicateOf?: string;
+  /** 'imported' = came from another hunter's archive and earns no points. */
+  origin?: 'own' | 'imported';
+  /** Display name of the hunter an imported record came from. */
+  sourceHunter?: string;
 }
 
 /**
@@ -68,12 +83,44 @@ interface TypoHunterDB extends DBSchema {
     key: string;
     value: unknown;
   };
+  images: {
+    key: string;
+    value: Blob;
+  };
 }
 
 const DB_NAME = 'typo-hunter-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<TypoHunterDB>> | null = null;
+
+/** Synchronously converts a base64 data URL into a Blob (safe inside IDB upgrade transactions). */
+export function dataUrlToBlob(dataUrl: string): Blob | null {
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(dataUrl);
+  if (!match) return null;
+  const mime = match[1] || 'application/octet-stream';
+  try {
+    if (match[2]) {
+      const binary = atob(match[3]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+    return new Blob([decodeURIComponent(match[3])], { type: mime });
+  } catch {
+    return null;
+  }
+}
+
+/** Reads a Blob as a data URL (used for export). */
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 
 /**
  * Acquires a singleton database connection with automatic schema migration handling.
@@ -81,7 +128,7 @@ let dbPromise: Promise<IDBPDatabase<TypoHunterDB>> | null = null;
 export const getDB = (): Promise<IDBPDatabase<TypoHunterDB>> => {
   if (!dbPromise) {
     dbPromise = openDB<TypoHunterDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, _oldVersion, _newVersion, transaction) {
+      async upgrade(db, oldVersion, _newVersion, transaction) {
         let store;
         if (!db.objectStoreNames.contains('discoveries')) {
           store = db.createObjectStore('discoveries', { keyPath: 'id' });
@@ -98,6 +145,26 @@ export const getDB = (): Promise<IDBPDatabase<TypoHunterDB>> => {
 
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta');
+        }
+
+        // Migration to v3: move full-size images out of the list records into an
+        // `images` store as Blobs. Lists then load only small thumbnails.
+        if (!db.objectStoreNames.contains('images')) {
+          db.createObjectStore('images');
+        }
+        if (oldVersion > 0 && oldVersion < 3) {
+          const images = transaction.objectStore('images');
+          let cursor = await store.openCursor();
+          while (cursor) {
+            const value = cursor.value as Discovery;
+            if (typeof value.image === 'string' && value.image.startsWith('data:')) {
+              const blob = dataUrlToBlob(value.image);
+              if (blob) await images.put(blob, value.id);
+              const { image: _drop, ...rest } = value;
+              await cursor.update(rest as Discovery);
+            }
+            cursor = await cursor.continue();
+          }
         }
       },
       blocked() {
@@ -132,28 +199,35 @@ export function validateDiscovery(input: unknown): Discovery {
   if (!d.title || typeof d.title !== 'string' || !d.title.trim()) {
     throw new Error('Record is missing a valid "title".');
   }
-  if (!d.image || typeof d.image !== 'string') {
-    throw new Error('Record is missing an "image" payload.');
+  const hasImage = typeof d.image === 'string' && d.image.startsWith('data:image/');
+  const hasThumb = typeof d.thumbnail === 'string' && d.thumbnail.startsWith('data:image/');
+  if (!hasImage && !hasThumb) {
+    throw new Error('Record is missing an image or thumbnail.');
   }
   if (!d.category || typeof d.category !== 'string') {
     throw new Error('Record is missing a "category" assignment.');
   }
 
   return {
-    id: String(d.id).slice(0, 64),
+    id: String(d.id).slice(0, 80),
     discoveryNumber: Number(d.discoveryNumber) || 1,
-    image: String(d.image),
-    thumbnail: String(d.thumbnail || d.image),
+    image: hasImage ? String(d.image) : undefined,
+    thumbnail: String(hasThumb ? d.thumbnail : d.image),
     title: String(d.title).trim().slice(0, 100),
     originalWording: d.originalWording ? String(d.originalWording).trim().slice(0, 200) : undefined,
     intendedWording: d.intendedWording ? String(d.intendedWording).trim().slice(0, 200) : undefined,
-    category: String(d.category).trim(),
+    category: (CATEGORIES as readonly string[]).includes(String(d.category).trim()) ? String(d.category).trim() : 'Other',
     location: d.location ? String(d.location).trim().slice(0, 120) : undefined,
     notes: d.notes ? String(d.notes).trim().slice(0, 1000) : undefined,
     createdAt: d.createdAt && !isNaN(Date.parse(d.createdAt)) ? d.createdAt : new Date().toISOString(),
     isFavorite: Boolean(d.isFavorite),
     isHallOfFame: Boolean(d.isHallOfFame),
     rating: Math.max(0, Math.min(5, Math.round(Number(d.rating) || 0))),
+    capturedFresh: d.capturedFresh === true ? true : undefined,
+    imageHash: typeof d.imageHash === 'string' && /^[0-9a-f]{16}$/.test(d.imageHash) ? d.imageHash : undefined,
+    duplicateOf: typeof d.duplicateOf === 'string' ? d.duplicateOf.slice(0, 80) : undefined,
+    origin: d.origin === 'imported' ? 'imported' : 'own',
+    sourceHunter: typeof d.sourceHunter === 'string' ? d.sourceHunter.trim().slice(0, 40) : undefined,
   };
 }
 
@@ -175,9 +249,10 @@ export const dbService = {
 
       const legacySamples = items.filter(d => d.id.startsWith(LEGACY_SAMPLE_PREFIX));
       if (legacySamples.length > 0) {
-        const wtx = db.transaction('discoveries', 'readwrite');
+        const wtx = db.transaction(['discoveries', 'images'], 'readwrite');
         for (const sample of legacySamples) {
-          await wtx.store.delete(sample.id);
+          await wtx.objectStore('discoveries').delete(sample.id);
+          await wtx.objectStore('images').delete(sample.id);
         }
         await wtx.done;
       }
@@ -190,20 +265,38 @@ export const dbService = {
   },
 
   /**
-   * Persists or updates an individual discovery within an atomic read-write transaction.
+   * Persists or updates a discovery. The full image is stored separately as a Blob:
+   * pass `imageBlob` for new captures; an `image` data URL on the record (imports)
+   * is converted automatically. Record and image are written in one transaction.
    */
-  async saveDiscovery(discovery: Discovery): Promise<void> {
+  async saveDiscovery(discovery: Discovery, imageBlob?: Blob): Promise<Discovery> {
     const sanitized = validateDiscovery(discovery);
+    const blob = imageBlob || (sanitized.image ? dataUrlToBlob(sanitized.image) : null);
+    const { image: _drop, ...record } = sanitized;
     const db = await getDB();
-    await db.put('discoveries', sanitized);
+    const tx = db.transaction(['discoveries', 'images'], 'readwrite');
+    await tx.objectStore('discoveries').put(record as Discovery);
+    if (blob) await tx.objectStore('images').put(blob, record.id);
+    await tx.done;
+    return record as Discovery;
+  },
+
+  /** Full-size image for one discovery, or undefined (falls back to the thumbnail). */
+  async getImage(id: string): Promise<Blob | undefined> {
+    const db = await getDB();
+    return db.get('images', id);
   },
 
   /**
-   * Permanently deletes a discovery by primary key.
+   * Permanently deletes a discovery and its image. Points already earned stay
+   * locked in the points ledger.
    */
   async deleteDiscovery(id: string): Promise<void> {
     const db = await getDB();
-    await db.delete('discoveries', id);
+    const tx = db.transaction(['discoveries', 'images'], 'readwrite');
+    await tx.objectStore('discoveries').delete(id);
+    await tx.objectStore('images').delete(id);
+    await tx.done;
   },
 
   /**
@@ -235,6 +328,7 @@ export const dbService = {
   async clearAllData(): Promise<void> {
     const db = await getDB();
     await db.clear('discoveries');
+    await db.clear('images');
   },
 
   /**

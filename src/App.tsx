@@ -11,11 +11,15 @@
  *     with an elevated Hunter Yellow center Capture button.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useDialogA11y } from './hooks/useDialogA11y';
+import QRCode from 'qrcode';
+import { BattleQrScannerModal } from './components/BattleQrScannerModal';
+import { getDeviceId } from './utils/identity';
 import { dbService, Discovery } from './db/database';
 import { Home } from './screens/Home';
 import { Capture, ActiveSpeedBlitzSession } from './screens/Capture';
-import { pvpService, PvpMatchRecord } from './utils/pvpService';
+import { pvpService, PvpMatchRecord, BlitzResultPayload } from './utils/pvpService';
 import { generatePvpVictoryCardBlob, shareOrDownloadBlob } from './utils/shareCard';
 import { Collection } from './screens/Collection';
 import { Detail } from './screens/Detail';
@@ -24,13 +28,14 @@ import { Profile } from './screens/Profile';
 import { NotFound } from './screens/NotFound';
 import { IconHome, IconGrid, IconAward, IconUser, IconFlame, IconClose, IconGraduationCap } from './components/Icons';
 import { recordCuratorActivity, syncFaviconWithInactivity } from './utils/dynamicFavicon';
-import { checkInactivityNotification } from './utils/notificationService';
+import { syncReminderSchedule } from './utils/notificationService';
 import { OnboardingModal } from './components/OnboardingModal';
 import { HelpModal } from './components/HelpModal';
 import { PrivacyModal } from './components/PrivacyModal';
 import { PvpArenaModal } from './components/PvpArenaModal';
 import { TeacherModeModal } from './components/TeacherModeModal';
 import { teacherService, ClassExpedition } from './utils/teacherService';
+import { pointsLedger } from './utils/pointsLedger';
 
 export function App() {
   const [currentView, setCurrentView] = useState<string>('home');
@@ -47,7 +52,37 @@ export function App() {
   const [activeClassExpedition, setActiveClassExpedition] = useState<ClassExpedition | null>(() =>
     teacherService.getActiveClassExpedition()
   );
-  const [activeSpeedBlitz, setActiveSpeedBlitz] = useState<ActiveSpeedBlitzSession | null>(null);
+  // The running round is persisted so a reload doesn't lose it.
+  const [activeSpeedBlitz, setActiveSpeedBlitzState] = useState<ActiveSpeedBlitzSession | null>(() => {
+    try {
+      const raw = localStorage.getItem('typo_hunter_active_blitz');
+      return raw ? (JSON.parse(raw) as ActiveSpeedBlitzSession) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setActiveSpeedBlitz = useCallback(
+    (next: ActiveSpeedBlitzSession | null | ((prev: ActiveSpeedBlitzSession | null) => ActiveSpeedBlitzSession | null)) => {
+      setActiveSpeedBlitzState(prev => {
+        const value = typeof next === 'function' ? next(prev) : next;
+        try {
+          if (value) localStorage.setItem('typo_hunter_active_blitz', JSON.stringify(value));
+          else localStorage.removeItem('typo_hunter_active_blitz');
+        } catch {
+          // ignore
+        }
+        return value;
+      });
+    },
+    []
+  );
+  // After a round ends: my result QR, waiting for the rival's result to be scanned.
+  const [blitzSettle, setBlitzSettle] = useState<{ mine: BlitzResultPayload; opponentName: string; qr: string | null; error?: string } | null>(null);
+  const [showResultScanner, setShowResultScanner] = useState(false);
+  const [arenaInitialTab, setArenaInitialTab] = useState<'timer' | undefined>(undefined);
+  const settleDialogRef = useRef<HTMLDivElement>(null);
+  const verdictDialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(settleDialogRef, !!blitzSettle && !showResultScanner, () => setBlitzSettle(null));
   const [blitzVerdict, setBlitzVerdict] = useState<PvpMatchRecord | null>(null);
   const [sharingPlacard, setSharingPlacard] = useState(false);
   const [welcomeBackBanner, setWelcomeBackBanner] = useState<{
@@ -56,29 +91,75 @@ export function App() {
     message: string;
   } | null>(null);
 
+  useDialogA11y(verdictDialogRef, !!blitzVerdict, () => setBlitzVerdict(null));
+
   const handleStartSpeedBlitz = (blitz: {
+    battleId: string;
+    role: 'host' | 'join';
     opponentName: string;
     opponentTeam: string;
     opponentTeamTag: string;
-    opponentScore: number;
     durationMinutes: number;
   }) => {
+    const now = Date.now();
     setActiveSpeedBlitz({
-      battleId: `blitz_${Date.now()}`,
+      battleId: blitz.battleId,
+      role: blitz.role,
       opponentName: blitz.opponentName,
       opponentTeam: blitz.opponentTeam,
       opponentTeamTag: blitz.opponentTeamTag,
-      opponentScore: blitz.opponentScore,
       durationMinutes: blitz.durationMinutes,
-      endTime: Date.now() + blitz.durationMinutes * 60 * 1000,
+      startTime: now,
+      endTime: now + blitz.durationMinutes * 60 * 1000,
       earnedScore: 0,
+      specimens: 0,
     });
     setCurrentView('capture');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAddBlitzPoints = (pts: number) => {
-    setActiveSpeedBlitz(prev => prev ? { ...prev, earnedScore: prev.earnedScore + pts } : null);
+    setActiveSpeedBlitz(prev => (prev ? { ...prev, earnedScore: prev.earnedScore + pts, specimens: prev.specimens + 1 } : null));
+  };
+
+  const handleFinishBlitz = useCallback(() => {
+    setActiveSpeedBlitzState(current => {
+      if (!current) return current;
+      const mine = pvpService.createBlitzResultPayload(current.battleId, getDeviceId(), nickname, current.earnedScore, current.specimens);
+      setBlitzSettle({ mine, opponentName: current.opponentName, qr: null });
+      QRCode.toDataURL(JSON.stringify(mine), { errorCorrectionLevel: 'M', margin: 2, width: 240, color: { dark: '#282722', light: '#FFFDF9' } })
+        .then(qr => setBlitzSettle(prev => (prev && prev.mine.battleId === mine.battleId ? { ...prev, qr } : prev)))
+        .catch(err => console.error('Failed to render blitz result QR', err));
+      try {
+        localStorage.removeItem('typo_hunter_active_blitz');
+      } catch {
+        // ignore
+      }
+      return null;
+    });
+  }, [nickname]);
+
+  // The round ends on time even if the player left the camera screen.
+  useEffect(() => {
+    if (!activeSpeedBlitz) return;
+    const check = () => {
+      if (Date.now() >= activeSpeedBlitz.endTime) handleFinishBlitz();
+    };
+    check();
+    const interval = setInterval(check, 1000);
+    return () => clearInterval(interval);
+  }, [activeSpeedBlitz, handleFinishBlitz]);
+
+  const handleBlitzResultScanned = (rival: BlitzResultPayload) => {
+    setShowResultScanner(false);
+    if (!blitzSettle) return;
+    const { record, error } = pvpService.settleBlitz(blitzSettle.mine, rival);
+    if (error || !record) {
+      setBlitzSettle(prev => (prev ? { ...prev, error: error || 'Could not settle this blitz.' } : prev));
+      return;
+    }
+    setBlitzSettle(null);
+    setBlitzVerdict(record);
   };
 
   const handleShareBlitzVerdict = async () => {
@@ -99,21 +180,6 @@ export function App() {
     }
   };
 
-  const handleFinishBlitz = (finalScore?: number) => {
-    if (!activeSpeedBlitz) return;
-    const score = finalScore ?? activeSpeedBlitz.earnedScore;
-    const result = pvpService.resolveDuel(
-      nickname,
-      score,
-      Math.max(1, Math.round(score / 50)),
-      0,
-      activeSpeedBlitz.opponentName,
-      activeSpeedBlitz.opponentTeam,
-      activeSpeedBlitz.opponentScore
-    );
-    setBlitzVerdict(result);
-    setActiveSpeedBlitz(null);
-  };
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('typo_hunter_onboarded');
   });
@@ -162,6 +228,10 @@ export function App() {
   const loadDiscoveries = async () => {
     try {
       const items = await dbService.getAllDiscoveries();
+      if (!pointsLedger.isLoaded()) {
+        await pointsLedger.load();
+        await pointsLedger.seedIfNeeded(items);
+      }
       setDiscoveries(items);
     } catch (err) {
       console.error('Failed to load discoveries from DB', err);
@@ -180,11 +250,13 @@ export function App() {
         hours: hoursInactive,
         message:
           hoursInactive >= 72
-            ? `You saved us! Inactive for ${Math.floor(hoursInactive / 24)} days — your mascot was literally melting! Favicon restored to pristine yellow.`
-            : `Welcome back! Inactive for ${hoursInactive} hours. Mascot favicon restored from pleading to pristine yellow.`,
+            ? `Welcome back! No new typos in ${Math.floor(hoursInactive / 24)} days and your mascot has melted. Spot one to restore it.`
+            : `Welcome back! No new typos in ${hoursInactive} hours. Your mascot is worried. Spot one to cheer it up.`,
       });
     }
-    checkInactivityNotification();
+    // Reminders are delivered by the service worker in the background (see notificationService);
+    // checking here would only ever fire while the user is already in the app.
+    syncReminderSchedule();
   }, []);
 
   const navigateTo = (view: string, param?: string) => {
@@ -214,7 +286,7 @@ export function App() {
       {/* Mobile-optimized Container */}
       <div className="w-full max-w-2xl min-h-screen relative flex flex-col bg-[#F4EBDD]">
         
-        {/* Duolingo Re-engagement Welcome Banner */}
+        {/* Welcome-back banner (after a long gap without new typos) */}
         {welcomeBackBanner?.show && (
           <div className="mx-4 mt-3 bg-[#FFFDF9] border-2 border-black p-3.5 rounded-2xl shadow-brutal flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -222,7 +294,7 @@ export function App() {
                 <IconFlame size={16} className="text-black" />
               </div>
               <div>
-                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#D66A4A] block">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#D66A4A] block">
                   Curator Re-Engagement
                 </span>
                 <p className="text-xs font-mono font-bold text-black leading-tight mt-0.5">
@@ -248,7 +320,7 @@ export function App() {
                 <IconGraduationCap size={16} />
               </div>
               <div className="min-w-0">
-                <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#E8B92D] block truncate">
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#E8B92D] block truncate">
                   Class Assignment Active · {activeClassExpedition.instructorName}
                 </span>
                 <p className="text-xs font-mono font-bold text-white truncate">
@@ -387,7 +459,11 @@ export function App() {
         {/* P2P Multiplayer Battle Arena Modal */}
         <PvpArenaModal
           isOpen={showPvpArena}
-          onClose={() => setShowPvpArena(false)}
+          onClose={() => {
+            setShowPvpArena(false);
+            setArenaInitialTab(undefined);
+          }}
+          initialTab={arenaInitialTab}
           nickname={nickname}
           discoveries={discoveries}
           onStartSpeedBlitz={handleStartSpeedBlitz}
@@ -403,6 +479,7 @@ export function App() {
           }}
           nickname={nickname}
           discoveries={discoveries}
+          onUpdateNickname={setNickname}
           onClassJoined={(expedition) => {
             // Student device: the teacher's Master QR starts the hunt for everyone who scans it.
             setActiveClassExpedition(expedition);
@@ -411,12 +488,59 @@ export function App() {
           }}
         />
 
+        {/* Speed Blitz: swap result QRs to settle */}
+        {blitzSettle && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 select-none" ref={settleDialogRef} role="dialog" aria-modal="true" aria-label="Settle Speed Blitz">
+            <div className="editorial-card bg-[#F4EBDD] p-5 rounded-3xl max-w-sm w-full border-3 border-black shadow-brutal-lg text-center space-y-3 max-h-[92vh] overflow-y-auto">
+              <span className="text-[11px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">Time's up!</span>
+              <h2 className="font-heading font-extrabold text-xl text-black">You scored {blitzSettle.mine.score} pts</h2>
+              <p className="text-xs font-mono text-gray-700">
+                Swap screens with {blitzSettle.opponentName}: they scan your result, you scan theirs. Then you'll both see the same winner.
+              </p>
+              {blitzSettle.qr ? (
+                <img src={blitzSettle.qr} alt="Your Speed Blitz result QR" className="w-52 h-52 mx-auto border-2 border-black rounded-2xl bg-white p-2" />
+              ) : (
+                <div className="w-52 h-52 mx-auto bg-gray-100 rounded-2xl" />
+              )}
+              {blitzSettle.error && (
+                <p className="text-xs font-mono font-bold text-[#D66A4A]" role="alert">{blitzSettle.error}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowResultScanner(true)}
+                className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal"
+              >
+                Scan Rival's Result
+              </button>
+              <button
+                type="button"
+                onClick={() => setBlitzSettle(null)}
+                className="w-full text-[11px] font-mono text-gray-600 underline cursor-pointer"
+              >
+                Skip (don't record this blitz)
+              </button>
+            </div>
+          </div>
+        )}
+
+        <BattleQrScannerModal
+          isOpen={showResultScanner}
+          onClose={() => setShowResultScanner(false)}
+          onBlitzJoined={() => {
+            setShowResultScanner(false);
+            setBlitzSettle(prev => (prev ? { ...prev, error: "That's a challenge QR. Ask your rival to show their result screen." } : prev));
+          }}
+          onBlitzResultScanned={handleBlitzResultScanned}
+        />
+
         {/* Speed Blitz Battle Verdict Dialog */}
         {blitzVerdict && (
           <div
+            ref={verdictDialogRef}
             className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-xs select-none"
             role="dialog"
             aria-modal="true"
+            aria-label="Speed Blitz result"
           >
             <div className="editorial-card bg-[#F4EBDD] p-6 rounded-3xl max-w-sm w-full border-3 border-black shadow-brutal-lg text-center space-y-4">
               <span className="text-[10px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">
@@ -457,25 +581,17 @@ export function App() {
                   <span>{sharingPlacard ? 'Rendering Placard…' : 'Export / Share Battle Placard'}</span>
                 </button>
 
-                {blitzVerdict.outcome === 'DRAW' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const opp = {
-                        opponentName: blitzVerdict.opponentName,
-                        opponentTeam: blitzVerdict.opponentTeam,
-                        opponentTeamTag: 'TIE',
-                        opponentScore: blitzVerdict.opponentScore,
-                        durationMinutes: 2,
-                      };
-                      setBlitzVerdict(null);
-                      handleStartSpeedBlitz(opp);
-                    }}
-                    className="w-full bg-[#D66A4A] text-white py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer border-2 border-black shadow-brutal-sm"
-                  >
-                    Launch 2-Min Sudden Death Duel!
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBlitzVerdict(null);
+                    setArenaInitialTab('timer');
+                    setShowPvpArena(true);
+                  }}
+                  className="w-full bg-[#D66A4A] text-white py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer border-2 border-black shadow-brutal-sm"
+                >
+                  {blitzVerdict.outcome === 'DRAW' ? 'Tie! Start a Rematch Blitz' : 'Rematch'}
+                </button>
 
                 <button
                   onClick={() => setBlitzVerdict(null)}
@@ -543,7 +659,7 @@ export function App() {
               >
                 +
               </button>
-              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-black mt-0.5">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-black mt-0.5">
                 Spot
               </span>
             </div>

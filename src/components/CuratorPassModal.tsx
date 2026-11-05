@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import QRCode from 'qrcode';
 import { Discovery } from '../db/database';
-import { calculateTotalCuratorPoints } from '../utils/proofOfSighting';
+import { useHunterPoints } from '../hooks/useHunterPoints';
+import { getDeviceId } from '../utils/identity';
 import { IconClose } from './Icons';
 import { pvpService } from '../utils/pvpService';
 
@@ -18,12 +20,15 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
   nickname,
   discoveries,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showPayload, setShowPayload] = useState(false);
 
   const specimenCount = discoveries.length;
   const legendCount = discoveries.filter(d => d.isHallOfFame).length;
-  const totalPoints = calculateTotalCuratorPoints(discoveries);
+  const totalPoints = useHunterPoints();
   const topSpecimen = discoveries.length > 0
     ? [...discoveries].sort((a, b) => (b.rating || 0) - (a.rating || 0))[0]
     : null;
@@ -41,11 +46,12 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
   const rank = getRank(specimenCount);
   const squad = pvpService.getCurrentTeam();
 
-  // Compact payload structure with points and cryptographic proof fingerprint
+  // Compact payload: name, squad, locked points, device id. The checksum is a format marker, not a signature.
   const payload = {
     app: 'TYPO_HUNTER',
     v: 1,
     hunter: nickname.trim() || 'Hunter',
+    deviceId: getDeviceId(),
     rank,
     team: squad.name,
     teamTag: squad.tag,
@@ -79,6 +85,7 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
   return (
     <div 
       className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs" 
+      ref={dialogRef}
       role="dialog" 
       aria-modal="true" 
       aria-label="Offline Curator Pass"
@@ -109,7 +116,7 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
           <div className="bg-[#FFFDF9] border-2 border-black rounded-xl p-4 shadow-brutal-sm">
             <div className="flex justify-between items-center mb-3 border-b border-black/10 pb-2">
               <div>
-                <span className="text-[9px] font-mono font-bold uppercase text-gray-500 block">Curator</span>
+                <span className="text-[10px] font-mono font-bold uppercase text-gray-500 block">Curator</span>
                 <h3 className="text-lg font-extrabold font-heading text-black leading-tight">
                   {nickname || 'Hunter'}
                 </h3>
@@ -129,13 +136,13 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
                     Generating QR…
                   </div>
                 )}
-                <span className="text-[9px] font-mono text-gray-500 uppercase font-bold mt-1 tracking-wider">
+                <span className="text-[10px] font-mono text-gray-500 uppercase font-bold mt-1 tracking-wider">
                   Scan Screen-to-Screen (100% Offline)
                 </span>
               </div>
             ) : (
               <div className="bg-[#282722] text-[#E8B92D] p-3 rounded-lg font-mono text-[10px] mb-3 overflow-x-auto border-2 border-black">
-                <span className="text-gray-400 block mb-1 text-[9px] uppercase">// Verified JSON Payload & Checksum</span>
+                <span className="text-gray-400 block mb-1 text-[10px] uppercase">// Verified JSON Payload & Checksum</span>
                 <pre className="whitespace-pre-wrap break-all leading-tight">
                   {JSON.stringify(payload, null, 2)}
                 </pre>
@@ -162,23 +169,23 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
               onClick={() => setShowPayload(!showPayload)}
               className="w-full text-center text-[10px] font-mono font-bold text-gray-600 hover:text-black underline cursor-pointer"
             >
-              {showPayload ? '← View Visual QR Code' : 'View Raw Verified Payload & Checksum →'}
+              {showPayload ? '← View Visual QR Code' : 'View Raw QR Contents →'}
             </button>
           </div>
 
           {/* School & Peer Trust Verification */}
           <div className="bg-[#FFF9EC] p-3.5 rounded-xl border border-black/20 text-[11px] font-mono text-gray-800 leading-snug space-y-1.5">
             <span className="font-bold text-black uppercase text-[10px] tracking-wider block">
-              Classroom & Peer Anti-Cheat Verification:
+              How to read this pass:
             </span>
             <p>
-              <strong>• Physical Evidence:</strong> Points are earned only from real photos with optical proof hashes. Fabricated points without evidence will fail peer verification.
+              <strong>• Honour system:</strong> this QR shows your locked points, but a QR code can't prove them. If it matters, ask to see the photos.
             </p>
             <p>
-              <strong>• Point Breakdown:</strong> Base photo (+50), Intended correction (+30), Category (+20), Field notes (+15), Funniness rating (+10 to +50).
+              <strong>• Points:</strong> photo (+50), correction (+30), category (+20, or +10 for Other), location (+10), notes (+10). Star ratings and Legends don't add points.
             </p>
             <p>
-              <strong>• Auditing Sighting:</strong> Tap any specimen in your Archive to show the full photograph, OCR verification badge, and timestamp to a friend or instructor.
+              <strong>• Show your work:</strong> tap any entry in your Archive to show the full photo and date to a friend or teacher.
             </p>
           </div>
         </div>

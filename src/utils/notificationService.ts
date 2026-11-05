@@ -1,19 +1,21 @@
 /**
  * @file notificationService.ts
- * @description Customizable notification engine with Duolingo-style guilt-trip dispatches,
+ * @description Customizable notification engine with playful guilt-trip dispatches,
  * proofreader alerts, and inactivity nudges.
  *
  * ARCHITECTURAL DESIGN:
  * - 100% Client-Side & Offline: Uses the Web Notifications API and Service Worker notifications
  *   with zero remote tracking servers.
- * - Duolingo Persona System:
- *     - "Unhinged Duolingo": Hilarious, dramatic, passive-aggressive guilt trips.
+ * - Persona System:
+ *     - "Dramatic Mascot": Hilarious, dramatic, passive-aggressive guilt trips.
  *     - "Stern Proofreader": Academic emergency field citations and punctuation alerts.
  *     - "Urban Safari Scout": Street photography prompts and observational encouragement.
  * - Inactivity Triggers: Correlated with the dynamic favicon states (24h, 48h, 72h).
  */
 
-export type NotificationTone = 'duolingo' | 'stern' | 'safari';
+export type NotificationTone = 'playful' | 'stern' | 'safari';
+
+import { ROTATING_PROMPTS } from './constants';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -29,7 +31,7 @@ const STORAGE_KEY_SETTINGS = 'typo_hunter_notification_settings';
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: false,
-  tone: 'duolingo',
+  tone: 'playful',
   inactivityReminder: true,
   inactivityHoursThreshold: 24,
   dailySafariTime: 'off',
@@ -38,10 +40,10 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
 
 export const NOTIFICATION_PERSONAS = [
   {
-    id: 'duolingo' as NotificationTone,
-    name: 'Unhinged Duolingo',
+    id: 'playful' as NotificationTone,
+    name: 'Dramatic Mascot',
     badge: 'GUILT-TRIP',
-    tagline: 'Dramatic, passive-aggressive guilt trips & melting mascot warnings.',
+    tagline: 'Dramatic, over-the-top guilt trips when you go quiet.',
     sample: '"Your 3-day hunting streak is sobbing in the corner. Don\'t make me come down there."',
     badgeBg: '#E8B92D',
     badgeText: '#282722',
@@ -74,7 +76,13 @@ export function getNotificationSettings(): NotificationSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (!raw) return DEFAULT_NOTIFICATION_SETTINGS;
-    return { ...DEFAULT_NOTIFICATION_SETTINGS, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULT_NOTIFICATION_SETTINGS, ...JSON.parse(raw) };
+    // Older versions stored the playful tone under a different id.
+    if (!['playful', 'stern', 'safari'].includes(parsed.tone)) parsed.tone = 'playful';
+    // The inactivity schedule is internal (staged 24h / 48h / 72h); always start at 24h.
+    parsed.inactivityReminder = true;
+    parsed.inactivityHoursThreshold = 24;
+    return parsed;
   } catch {
     return DEFAULT_NOTIFICATION_SETTINGS;
   }
@@ -86,6 +94,77 @@ export function getNotificationSettings(): NotificationSettings {
 export function saveNotificationSettings(settings: NotificationSettings): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+  syncReminderSchedule();
+}
+
+export const REMINDER_SYNC_TAG = 'typo-hunter-reminders';
+
+type PeriodicSyncRegistration = ServiceWorkerRegistration & {
+  periodicSync?: {
+    register: (tag: string, options: { minInterval: number }) => Promise<void>;
+    unregister: (tag: string) => Promise<void>;
+  };
+};
+
+/**
+ * Whether reminders can arrive while the app is closed. Background delivery uses
+ * Periodic Background Sync, which currently works only in Chromium browsers for an
+ * installed app, at a rate the browser decides (roughly at most a few times a day).
+ */
+export async function getReminderSupport(): Promise<'background' | 'needs-install' | 'unsupported'> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return 'unsupported';
+  try {
+    const reg = (await navigator.serviceWorker.ready) as PeriodicSyncRegistration;
+    if (!reg.periodicSync) return 'unsupported';
+    const status = await navigator.permissions
+      .query({ name: 'periodic-background-sync' as PermissionName })
+      .catch(() => null);
+    return status && status.state === 'granted' ? 'background' : 'needs-install';
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/**
+ * Copies reminder settings to IndexedDB (the service worker can't read localStorage)
+ * and registers or removes the background check accordingly.
+ */
+export async function syncReminderSchedule(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const settings = getNotificationSettings();
+  try {
+    const { dbService } = await import('../db/database');
+    await dbService.setMeta('notificationSettings', settings);
+    // The worker can't import app code, so hand it the texts for the chosen tone.
+    await dbService.setMeta('reminderMessages', {
+      inactivity: {
+        h24: getInactivityDispatchMessage(settings.tone, 24),
+        h48: getInactivityDispatchMessage(settings.tone, 48),
+        h72: getInactivityDispatchMessage(settings.tone, 72),
+      },
+      daily: {
+        title: 'Daily typo hunt',
+        body: ROTATING_PROMPTS[new Date().getDate() % ROTATING_PROMPTS.length],
+      },
+    });
+  } catch {
+    // storage unavailable; nothing to schedule
+  }
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = (await navigator.serviceWorker.ready) as PeriodicSyncRegistration;
+    if (!reg.periodicSync) return;
+    const wantsReminders =
+      settings.enabled && (settings.inactivityReminder || settings.dailySafariTime !== 'off');
+    if (wantsReminders && Notification.permission === 'granted') {
+      await reg.periodicSync.register(REMINDER_SYNC_TAG, { minInterval: 6 * 60 * 60 * 1000 });
+    } else {
+      await reg.periodicSync.unregister(REMINDER_SYNC_TAG);
+    }
+  } catch (err) {
+    // Typically: not installed, so the browser refuses periodic sync.
+    console.info('[reminders] Background reminders unavailable:', (err as Error)?.message);
+  }
 }
 
 /**
@@ -137,13 +216,16 @@ export async function sendLocalNotification(
     // Attempt to use Service Worker registration if available
     if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
       const registration = await navigator.serviceWorker.ready;
+      const { soundVibration } = getNotificationSettings();
       await registration.showNotification(title, {
         body,
-        icon: '/favicon.svg',
-        badge: '/favicon.svg',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
         tag,
+        silent: !soundVibration,
+        vibrate: soundVibration ? [120, 60, 120] : undefined,
         data: { url: '/' },
-      } as any);
+      } as NotificationOptions);
       return true;
     }
 
@@ -167,10 +249,10 @@ export function getInactivityDispatchMessage(
   tone: NotificationTone,
   hoursInactive: number
 ): { title: string; body: string } {
-  if (tone === 'duolingo') {
+  if (tone === 'playful') {
     if (hoursInactive >= 72) {
       return {
-        title: '[ALERT] YOUR FAVICON IS MELTING!',
+        title: '[ALERT] THE MASCOT IS MELTING!',
         body: 'You haven\'t documented a typo in 3 days. Your Typo Hunter mascot has literally melted into a puddle of grammatical despair. Save it now!',
       };
     }
@@ -232,9 +314,9 @@ export async function sendTestNotification(tone?: NotificationTone): Promise<{ s
   const selectedTone = tone || settings.tone;
 
   const sampleMessages: Record<NotificationTone, { title: string; body: string }> = {
-    duolingo: {
-      title: '[DISPATCH] Unhinged Duolingo Test',
-      body: 'These street typos won\'t photograph themselves! Keep your streak alive or your favicon will start crying.',
+    playful: {
+      title: '[DISPATCH] Dramatic Mascot Test',
+      body: 'These street typos won\'t photograph themselves! Keep your streak alive or our mascot will start crying.',
     },
     stern: {
       title: '[DISPATCH] Proofreader Test #001',
@@ -272,38 +354,4 @@ export async function sendTestNotification(tone?: NotificationTone): Promise<{ s
       ? `Sent test notification in "${NOTIFICATION_PERSONAS.find(p => p.id === selectedTone)?.name}" voice!`
       : 'Failed to deliver notification. Check your system alert permissions.',
   };
-}
-
-/**
- * Periodic inactivity check called on app initialization or service worker wakeup.
- */
-export async function checkInactivityNotification(): Promise<boolean> {
-  const settings = getNotificationSettings();
-  if (!settings.enabled || !settings.inactivityReminder) return false;
-
-  const raw = localStorage.getItem('typo_hunter_last_active_timestamp');
-  if (!raw) return false;
-
-  const lastActive = parseInt(raw, 10);
-  const hoursInactive = Math.floor((Date.now() - lastActive) / (1000 * 60 * 60));
-
-  if (hoursInactive >= settings.inactivityHoursThreshold) {
-    // Check if we already alerted in the last 12 hours
-    const lastSentRaw = localStorage.getItem('typo_hunter_last_nudge_sent');
-    if (lastSentRaw) {
-      const lastSentTime = parseInt(lastSentRaw, 10);
-      if (Date.now() - lastSentTime < 12 * 60 * 60 * 1000) {
-        return false;
-      }
-    }
-
-    const dispatch = getInactivityDispatchMessage(settings.tone, hoursInactive);
-    const sent = await sendLocalNotification(dispatch.title, dispatch.body, 'inactivity-nudge');
-    if (sent) {
-      localStorage.setItem('typo_hunter_last_nudge_sent', Date.now().toString());
-    }
-    return sent;
-  }
-
-  return false;
 }

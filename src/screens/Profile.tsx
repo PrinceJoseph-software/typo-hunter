@@ -1,15 +1,15 @@
 /**
  * @file Profile.tsx
  * @description Curator profile, on-device telemetry metrics, milestone gamification,
- * academic point scoring engine, and tamper-evident SHA-256 JSON archive import/export.
+ * point scoring, and checksummed JSON backup import/export.
  *
  * ARCHITECTURAL DESIGN:
  * Unlike conventional consumer applications that tie user identity to centralized authentication
  * systems (Firebase, Supabase, OAuth), TYPO HUNTER operates under a sovereign, zero-cloud model:
  *   - Identity: Stored locally in `localStorage` under `typo_hunter_nickname`.
  *   - Academic Scoring: Deterministic point calculation for school competitions & peer challenges.
- *   - Tamper-Evident Archives: JSON exports are sealed with SHA-256 integrity signatures
- *     using the Web Crypto API to prevent score manipulation or manual specimen forgery.
+ *   - Backups: JSON exports carry a SHA-256 checksum that detects accidental damage
+ *     (not a security signature).
  *   - Telemetry: Metrics (specimen counts, category distribution, earliest discovery timestamp)
  *     are dynamically computed from IndexedDB without background tracking.
  *   - Milestones: Evaluated declaratively against the local dataset without coercive habit loops.
@@ -30,8 +30,10 @@ import {
 } from '../components/Icons';
 import { CuratorPassModal } from '../components/CuratorPassModal';
 import { PrivacyModal } from '../components/PrivacyModal';
-import { createSecureArchiveExport, verifyAndUnpackArchive } from '../utils/archiveSecurity';
-import { calculateTotalCuratorPoints, calculateSpecimenScore } from '../utils/proofOfSighting';
+import { createArchiveExportBlob, downloadBlob, verifyAndUnpackArchive } from '../utils/archiveSecurity';
+import { calculateSpecimenScore } from '../utils/proofOfSighting';
+import { useHunterPoints } from '../hooks/useHunterPoints';
+import { pointsLedger } from '../utils/pointsLedger';
 import { NotificationSettingsCard } from '../components/NotificationSettingsCard';
 
 interface ProfileProps {
@@ -105,22 +107,16 @@ export const Profile: React.FC<ProfileProps> = ({
     setTimeout(() => setSavedMessage(false), 2000);
   };
 
-  // Tamper-Evident SHA-256 JSON Archive Export
+  // Backup export (checksummed, not signed)
   const exportJSON = async () => {
     setIsExporting(true);
     try {
-      const signedJson = await createSecureArchiveExport(discoveries, nickname);
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(signedJson);
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `typo-hunter-signed-archive-${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+      const blob = await createArchiveExportBlob(discoveries, nickname);
+      downloadBlob(blob, `typo-hunter-backup-${new Date().toISOString().split('T')[0]}.json`);
     } catch {
       setImportFeedback({
         type: 'error',
-        message: 'Failed to generate secure archive. Ensure browser cryptography is enabled.',
+        message: 'Could not create the backup file. Please try again.',
       });
       setTimeout(() => setImportFeedback({ type: 'idle', message: '' }), 4000);
     } finally {
@@ -128,7 +124,7 @@ export const Profile: React.FC<ProfileProps> = ({
     }
   };
 
-  // Tamper-Evident JSON Archive Import with Cryptographic Integrity Check
+  // Backup import: own backup restores; anyone else's becomes view-only
   const importJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -142,7 +138,7 @@ export const Profile: React.FC<ProfileProps> = ({
           if (result.isTampered) {
             setImportFeedback({
               type: 'tampered',
-              message: 'SECURITY ALERT: Archive checksum mismatch. File has been tampered with or modified externally. Import rejected.',
+              message: result.statusMessage,
             });
           } else {
             setImportFeedback({
@@ -154,29 +150,48 @@ export const Profile: React.FC<ProfileProps> = ({
           return;
         }
 
+        // Your own backup → restore entries and locked points.
+        // Anyone else's file → view-only copies that never count toward your points.
         let importedCount = 0;
+        let nextNumber = await dbService.getNextDiscoveryNumber();
+        const sourceKey = (result.ownerId || result.hunterName || 'unknown').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'unknown';
         for (const item of result.discoveries) {
           try {
-            await dbService.saveDiscovery(item);
+            if (result.isOwnBackup) {
+              await dbService.saveDiscovery({ ...item, origin: 'own' });
+            } else {
+              const foreignId = `imp_${sourceKey}_${String(item.id).slice(0, 40)}`;
+              const existing = discoveries.find(d => d.id === foreignId);
+              await dbService.saveDiscovery({
+                ...item,
+                id: foreignId,
+                discoveryNumber: existing ? existing.discoveryNumber : nextNumber++,
+                origin: 'imported',
+                sourceHunter: item.sourceHunter || result.hunterName || 'another hunter',
+                duplicateOf: undefined,
+              });
+            }
             importedCount++;
           } catch {
             // Skip invalid records
           }
         }
+        if (result.isOwnBackup && result.pointsLedger) {
+          await pointsLedger.merge(result.pointsLedger);
+        }
 
         if (importedCount > 0) {
           onImportComplete();
-          const msg = result.isLegacy
-            ? `Imported ${importedCount} specimen(s) from legacy v1 archive.`
-            : `Verified & imported ${importedCount} authentic specimen(s) (SHA-256 integrity verified).`;
           setImportFeedback({
             type: 'success',
-            message: msg,
+            message: result.isOwnBackup
+              ? `Restored ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} and your locked points from your backup.`
+              : `Added ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} from ${result.hunterName || 'another hunter'}. Imported entries are view-only and don't count toward your points.`,
           });
         } else {
           setImportFeedback({
             type: 'error',
-            message: 'No valid specimen records could be extracted from archive.',
+            message: 'No valid entries could be read from this file.',
           });
         }
         setTimeout(() => setImportFeedback({ type: 'idle', message: '' }), 5000);
@@ -197,7 +212,7 @@ export const Profile: React.FC<ProfileProps> = ({
   const hofCount = discoveries.filter(d => d.isHallOfFame).length;
 
   // Curatorial Points Calculation & Breakdown
-  const totalPoints = useMemo(() => calculateTotalCuratorPoints(discoveries), [discoveries]);
+  const totalPoints = useHunterPoints();
   const scoreBreakdown = useMemo(() => {
     return discoveries.reduce(
       (acc, d) => {
@@ -206,11 +221,9 @@ export const Profile: React.FC<ProfileProps> = ({
         acc.corrections += s.correctionBonus;
         acc.categories += s.categorizationBonus;
         acc.notes += s.fieldNotesBonus;
-        acc.ratings += s.ratingBonus;
-        acc.legends += s.hallOfFameBonus;
         return acc;
       },
-      { photos: 0, corrections: 0, categories: 0, notes: 0, ratings: 0, legends: 0 }
+      { photos: 0, corrections: 0, categories: 0, notes: 0 }
     );
   }, [discoveries]);
 
@@ -268,7 +281,7 @@ export const Profile: React.FC<ProfileProps> = ({
           <div className="w-12 h-12 bg-white border-2 border-black rounded-full flex items-center justify-center mx-auto mb-2.5 shadow-brutal-sm">
             <IconCamera size={22} className="text-[#D66A4A]" />
           </div>
-          <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1">
             Curator Level: Apprentice Scout
           </span>
           <h3 className="font-heading font-extrabold text-base text-black mb-1">
@@ -284,7 +297,7 @@ export const Profile: React.FC<ProfileProps> = ({
       <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] mb-6 border-2 border-black shadow-brutal-sm">
         <div className="flex items-center justify-between mb-3 border-b border-black/10 pb-2">
           <div>
-            <span className="text-[9px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">
+            <span className="text-[10px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">
               Offline P2P Competition & Teams
             </span>
             <h3 className="font-heading font-extrabold text-base text-black mt-0.5">
@@ -338,55 +351,42 @@ export const Profile: React.FC<ProfileProps> = ({
             <span className="font-heading font-extrabold text-2xl text-black leading-none block">
               {totalPoints}
             </span>
-            <span className="text-[9px] font-mono font-bold uppercase text-black">POINTS</span>
+            <span className="text-[10px] font-mono font-bold uppercase text-black">POINTS</span>
           </div>
         </div>
 
         <p className="text-xs font-mono text-gray-600 mb-3 leading-relaxed">
-          Points allocated using standardized Proof-of-Sighting rules for classroom assignments and peer verification.
+          Points come from how fully you document each typo: photo, correction, category, location and notes (up to 120 per photo).
         </p>
 
         {/* Detailed Points Breakdown */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
           <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Photo Evidence</span>
+            <span className="text-gray-500 uppercase text-[10px] block">Photo Evidence</span>
             <span className="font-bold text-black text-sm">{scoreBreakdown.photos} pts</span>
-            <span className="text-[9px] text-gray-500 block">+50 / photo</span>
+            <span className="text-[10px] text-gray-500 block">+50 / photo</span>
           </div>
           <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Linguistic Analysis</span>
+            <span className="text-gray-500 uppercase text-[10px] block">Linguistic Analysis</span>
             <span className="font-bold text-black text-sm">{scoreBreakdown.corrections} pts</span>
-            <span className="text-[9px] text-gray-500 block">+30 / fix</span>
+            <span className="text-[10px] text-gray-500 block">+30 / fix</span>
           </div>
           <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Category Label</span>
+            <span className="text-gray-500 uppercase text-[10px] block">Category Label</span>
             <span className="font-bold text-black text-sm">{scoreBreakdown.categories} pts</span>
-            <span className="text-[9px] text-gray-500 block">+20 / category</span>
+            <span className="text-[10px] text-gray-500 block">+20 / category</span>
           </div>
           <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Field Context</span>
+            <span className="text-gray-500 uppercase text-[10px] block">Field Context</span>
             <span className="font-bold text-black text-sm">{scoreBreakdown.notes} pts</span>
-            <span className="text-[9px] text-gray-500 block">+10-20 notes</span>
-          </div>
-          <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Humor Ratings</span>
-            <span className="font-bold text-[#D66A4A] text-sm">{scoreBreakdown.ratings} pts</span>
-            <span className="text-[9px] text-gray-500 block">Up to +50 / stars</span>
-          </div>
-          <div className="bg-[#FAF6EE] p-2.5 rounded-xl border border-black/15">
-            <span className="text-gray-500 uppercase text-[9px] block">Hall of Fame</span>
-            <span className="font-bold text-[#E8B92D] text-sm">{scoreBreakdown.legends} pts</span>
-            <span className="text-[9px] text-gray-500 block">+100 / legend</span>
+            <span className="text-[10px] text-gray-500 block">+10-20 notes</span>
           </div>
         </div>
 
-        <div className="mt-3 pt-2.5 border-t border-black/10 flex items-center justify-between text-[11px] font-mono text-gray-600">
-          <span className="flex items-center gap-1.5">
-            <IconShield size={13} className="text-[#82917B]" />
-            Anti-Cheat Verification:
-          </span>
-          <span className="font-bold text-black">SHA-256 Hashed Archives</span>
-        </div>
+        <p className="mt-3 pt-2.5 border-t border-black/10 text-[11px] font-mono text-gray-600 leading-relaxed">
+          The breakdown covers the entries you have now. Your total is locked: points stay even after you delete photos.
+          Star ratings and Legends are personal picks and don't earn points. Repeated photos and imported entries earn nothing.
+        </p>
       </div>
 
       {/* Nickname Stamped Card */}
@@ -426,15 +426,15 @@ export const Profile: React.FC<ProfileProps> = ({
         <div className="grid grid-cols-3 gap-2.5 text-center mb-4">
           <div className="bg-[#FAF6EE] p-3 rounded-xl border border-black/20">
             <span className="text-3xl font-extrabold font-heading text-black block leading-none">{count}</span>
-            <span className="text-[9px] font-mono uppercase text-gray-600 font-bold block mt-1">Specimens</span>
+            <span className="text-[10px] font-mono uppercase text-gray-600 font-bold block mt-1">Specimens</span>
           </div>
           <div className="bg-[#FAF6EE] p-3 rounded-xl border border-black/20">
             <span className="text-3xl font-extrabold font-heading text-[#D66A4A] block leading-none">{favCount}</span>
-            <span className="text-[9px] font-mono uppercase text-gray-600 font-bold block mt-1">Favorites</span>
+            <span className="text-[10px] font-mono uppercase text-gray-600 font-bold block mt-1">Favorites</span>
           </div>
           <div className="bg-[#FAF6EE] p-3 rounded-xl border border-black/20">
             <span className="text-3xl font-extrabold font-heading text-[#E8B92D] block leading-none">{hofCount}</span>
-            <span className="text-[9px] font-mono uppercase text-gray-600 font-bold block mt-1">Legends</span>
+            <span className="text-[10px] font-mono uppercase text-gray-600 font-bold block mt-1">Legends</span>
           </div>
         </div>
 
@@ -543,23 +543,23 @@ export const Profile: React.FC<ProfileProps> = ({
         )}
       </div>
 
-      {/* Customizable Notifications & Duolingo Mascot Favicons */}
+      {/* Reminder settings (the mascot favicon itself is automatic) */}
       <NotificationSettingsCard />
 
-      {/* Offline Storage & Tamper-Evident Archive */}
+      {/* Backup & restore */}
       <div className="editorial-card p-5 rounded-2xl bg-white mb-6 space-y-4">
         <div>
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xs font-bold uppercase tracking-widest font-heading text-gray-500">
-              Offline Storage & Tamper-Proof Archive
+              Backup & Restore
             </h2>
             <span className="text-[10px] font-mono font-bold text-[#82917B] flex items-center gap-1">
               <IconShield size={12} />
-              SHA-256 Sealed
+              Checksummed
             </span>
           </div>
           <p className="text-xs text-gray-600 font-mono leading-relaxed">
-            All records and photographic blobs live inside IndexedDB. Exports are cryptographically hashed so students and peers cannot forge scores.
+            Everything lives only on this device. Export a backup regularly: clearing site data or losing the phone deletes your museum. Restoring your own backup brings back your locked points; importing a friend's file adds their entries as view-only.
           </p>
         </div>
 
@@ -590,10 +590,10 @@ export const Profile: React.FC<ProfileProps> = ({
             className="flex-1 btn-primary py-3 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             <IconDownload size={14} />
-            <span>{isExporting ? 'Hashing Archive...' : 'Export Signed JSON Archive'}</span>
+            <span>{isExporting ? 'Preparing backup…' : 'Export Backup'}</span>
           </button>
           <label className="flex-1 btn-secondary py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-center cursor-pointer select-none flex items-center justify-center">
-            Import JSON Archive
+            Import Backup
             <input type="file" accept=".json" onChange={importJSON} className="hidden" />
           </label>
         </div>
