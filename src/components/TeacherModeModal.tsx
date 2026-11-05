@@ -357,43 +357,6 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
     e.target.value = '';
   };
 
-  const handleAddDemoStudent = () => {
-    const demoNames = [
-      'Alex Rivera',
-      'Jordan Vance',
-      'Elena Rostova',
-      'Marcus Brody',
-      'Devon Kim',
-      'Chloe Bennett',
-    ];
-    const available = demoNames.filter(n => !gradebook.some(s => s.studentName === n));
-    const studentName = available[0] || `Student #${gradebook.length + 1}`;
-    const points = Math.round(180 + Math.random() * 160);
-    const specimens = Math.max(2, Math.round(points / 60));
-    const factions = ['RPS', 'RAID', 'SYN', 'PROOF'];
-    const squadFaction = factions[Math.floor(Math.random() * factions.length)];
-    const { grade, status } = teacherService.calculateGrade(points, targetPoints);
-
-    const submission: StudentSubmission = {
-      id: `demo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      studentName,
-      squadFaction,
-      classId: activeExpedition?.classId || 'ENG-201',
-      points,
-      specimensCataloged: specimens,
-      legendsEnshrined: Math.floor(Math.random() * 2),
-      grade,
-      status,
-      tamperVerified: false,
-      antiCheatHash: `DEMO-${Date.now().toString(36).toUpperCase()}`,
-      submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      source: 'demo',
-    };
-
-    teacherService.saveStudentToGradebook(submission);
-    setGradebook(teacherService.getClassGradebook());
-  };
-
   const handleAwardCommendation = (studentId: string) => {
     const student = gradebook.find(s => s.id === studentId);
     if (!student) return;
@@ -705,13 +668,6 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                 </div>
 
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAddDemoStudent}
-                    className="text-[10px] text-gray-600 hover:text-black underline cursor-pointer"
-                  >
-                    + Demo Student
-                  </button>
                   {gradebook.length > 0 && (
                     <button
                       type="button"
@@ -745,9 +701,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                             </h4>
                           </div>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {student.source === 'demo' || student.id.startsWith('demo_') ? (
-                              <span className="text-[8px] font-bold px-1 rounded border border-gray-400 text-gray-500">DEMO</span>
-                            ) : student.tamperVerified ? (
+                            {student.tamperVerified ? (
                               <span className="text-[8px] font-bold px-1 rounded border border-[#82917B] text-[#2D5A27]">VERIFIED</span>
                             ) : (
                               <span className="text-[8px] font-bold px-1 rounded border border-[#D66A4A] text-[#D66A4A]">UNVERIFIED</span>
@@ -819,7 +773,7 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                       {expandedStudentId === student.id && (
                         <div className="bg-[#FAF6EE] p-2 rounded-lg border border-black/10 text-[10px] text-gray-700 space-y-1">
                           <div>Class: <code>{student.classId}</code></div>
-                          <div>Joined via: {student.source === 'qr_submission' ? 'Submission QR' : student.source === 'qr_pass' ? 'Curator Pass QR' : student.source === 'archive' ? 'Signed archive (.json)' : 'Demo'}</div>
+                          <div>Joined via: {student.source === 'qr_submission' ? 'Submission QR' : student.source === 'qr_pass' ? 'Curator Pass QR' : 'Signed archive (.json)'}</div>
                           <div>Avg per specimen: {student.specimensCataloged > 0 ? Math.round(student.points / student.specimensCataloged) : 0} pts</div>
                           {student.specimenTitles && student.specimenTitles.length > 0 ? (
                             <div>
@@ -856,10 +810,11 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                   <div className="pt-2">
                     <button
                       type="button"
-                      onClick={handleAddDemoStudent}
-                      className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold"
+                      onClick={() => setScannerPurpose('student')}
+                      className="btn-primary py-2 px-4 rounded-xl text-xs uppercase font-bold inline-flex items-center gap-1.5 cursor-pointer"
                     >
-                      Add Simulated Student Submission
+                      <IconCamera size={13} />
+                      <span>Scan First Student</span>
                     </button>
                   </div>
                 </div>
@@ -939,7 +894,6 @@ export const TeacherModeModal: React.FC<TeacherModeModalProps> = ({
                         <div className="min-w-0">
                           <span className="font-bold text-black">{student.studentName}</span>
                           <span className="text-gray-500 ml-1">· {student.points} pts</span>
-                          {!eligible && <span className="text-[9px] text-gray-400 ml-1">(demo — can't battle)</span>}
                         </div>
                         <div className="flex gap-1" role="group" aria-label={`Squad for ${student.studentName}`}>
                           {(['alpha', 'bench', 'omega'] as const).map(opt => (

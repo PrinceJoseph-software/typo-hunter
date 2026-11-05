@@ -55,8 +55,8 @@ export interface StudentSubmission {
   antiCheatHash: string;
   submittedAt: string;
   teacherCommendation?: string;
-  /** How the student reached the roster. Only QR/archive entries can join class squads. */
-  source?: 'qr_submission' | 'qr_pass' | 'archive' | 'demo';
+  /** How the student reached the roster (always a real scan or signed archive). */
+  source?: 'qr_submission' | 'qr_pass' | 'archive';
   /** False when the student submitted for a different class than the one being hosted. */
   classMatch?: boolean;
   /** Specimen titles (available when the student shares a full signed archive). */
@@ -215,9 +215,13 @@ export const teacherService = {
     localStorage.setItem(STORAGE_CLASS_SQUADS, JSON.stringify(squads));
   },
 
-  /** Only students who reached the roster through a real QR scan or signed archive can battle. */
+  /** Legacy demo rows (from older versions) are never eligible; everyone else got in by a real scan. */
   isSquadEligible(student: StudentSubmission): boolean {
-    return student.source !== 'demo' && !student.id.startsWith('demo_');
+    return !this.isLegacyDemo(student);
+  },
+
+  isLegacyDemo(student: StudentSubmission): boolean {
+    return (student.source as string) === 'demo' || student.id.startsWith('demo_') || student.antiCheatHash.startsWith('DEMO-');
   },
 
   studentToSquadMember(student: StudentSubmission): SquadMember {
@@ -262,7 +266,13 @@ export const teacherService = {
   getClassGradebook(): StudentSubmission[] {
     try {
       const data = localStorage.getItem(STORAGE_GRADEBOOK);
-      return data ? JSON.parse(data) : [];
+      const list: StudentSubmission[] = data ? JSON.parse(data) : [];
+      // Purge simulated students saved by older versions of the app.
+      const real = list.filter(st => !this.isLegacyDemo(st));
+      if (real.length !== list.length) {
+        localStorage.setItem(STORAGE_GRADEBOOK, JSON.stringify(real));
+      }
+      return real;
     } catch {
       return [];
     }
