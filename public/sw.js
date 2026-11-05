@@ -10,7 +10,7 @@
  *   - Page navigations: network first (so new deploys show immediately), falling back
  *     to the cached app shell when offline.
  *   - Hashed assets (/assets/*): cache first (their names change when content changes).
- *   - Google Fonts: cached at runtime in a separate long-lived cache.
+ *   - Fonts are self-hosted and precached with the other built files.
  *
  * REMINDERS
  *   Periodic Background Sync (Chromium, installed app only) wakes this worker a few
@@ -21,7 +21,6 @@
 
 const CACHE_VERSION = 'dev'; /*__BUILD_VERSION__*/
 const CACHE_NAME = `typo-hunter-${CACHE_VERSION}`;
-const FONT_CACHE = 'typo-hunter-fonts-v1';
 
 const PRECACHE_ASSETS = [/*__PRECACHE_START__*/ '/', '/index.html', '/manifest.json' /*__PRECACHE_END__*/];
 
@@ -41,7 +40,8 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME && key !== FONT_CACHE)
+            // Also removes the old Google Fonts cache from earlier versions.
+            .filter((key) => key !== CACHE_NAME)
             .map((key) => caches.delete(key))
         )
       )
@@ -77,8 +77,7 @@ async function cacheFirst(request, cacheName) {
   if (cached) return cached;
   try {
     const response = await fetch(request);
-    // Opaque (cross-origin, no-cors) font responses have status 0 but are still usable.
-    if (response && (response.ok || response.type === 'opaque')) {
+    if (response && response.ok) {
       cache.put(request, response.clone());
     }
     return response;
@@ -106,11 +105,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (!url.protocol.startsWith('http')) return;
 
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(cacheFirst(request, FONT_CACHE));
-    return;
-  }
-  // Leave every other third-party request alone.
+  // Leave third-party requests alone (the app itself makes none).
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {

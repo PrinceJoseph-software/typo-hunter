@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective date:** 5 November 2026
+**Effective date:** 5 November 2026 (last updated 5 November 2026: fonts are now part of the app, so Google no longer receives any request)
 
 Typo Hunter is a web app for photographing and collecting language mistakes. It is designed so that **your collection stays on your device**. This policy explains what the app stores, what leaves your device, and what choices you have.
 
@@ -37,7 +37,9 @@ Data leaves your device only in these cases:
 1. **QR codes you choose to show.** Your Curator Pass contains your display name, squad, rank, points, number of finds, the title and rating of your best find, and your random device ID. Speed Blitz and class codes contain your name, score and device ID. Anyone who scans your screen can read this.
 2. **Files you choose to share.** A backup file contains your whole collection, including photos. A class review file contains the photos you took during that class. You decide where these go (for example AirDrop, email or a USB stick).
 3. **Share cards.** If you share a find, the image card goes wherever you send it.
-4. **Loading the app.** Like any website, the server that delivers the app (our hosting provider) receives standard technical information, such as your IP address and browser type, when you open it online. The app also loads fonts from Google Fonts, so Google receives a similar request. Neither request includes your photos or collection.
+4. **Loading the app.** Like any website, the server that delivers the app (our hosting provider) receives standard technical information, such as your IP address and browser type, when you open or update it online. That request never includes your photos or collection.
+
+**No third parties.** Everything the app needs, including its fonts, is delivered from the app's own site. It makes no requests to Google, advertising networks, analytics services or any other third party. Once it has been opened, it works without a connection.
 
 ## Camera and notifications
 

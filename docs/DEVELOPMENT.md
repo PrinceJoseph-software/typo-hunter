@@ -71,12 +71,23 @@ There are no environment variables and no configuration files to fill in. All se
 
 ## Testing and checks
 
-There is **no automated test suite** yet. The checks you can run today:
+**Continuous integration** (`.github/workflows/ci.yml`) runs on every pull request and every push to `main`:
+
+1. Install dependencies exactly as locked (`pnpm install --frozen-lockfile`)
+2. Type check (`tsc --noEmit`)
+3. Production build
+4. Check that every built file is in the service worker's offline precache list
+5. Fail if any third-party font, analytics or tracking host appears in the code or build
+6. Fail on high-severity known vulnerabilities in app dependencies (`pnpm audit --prod`)
+
+Run the same core checks locally before opening a pull request:
 
 ```bash
 pnpm exec tsc --noEmit   # type check
 pnpm build               # type check + production build
 ```
+
+There are no unit or end-to-end tests yet.
 
 ## Deployment
 
@@ -92,7 +103,7 @@ pnpm run deploy   # runs: vercel --prod (requires a logged-in Vercel CLI)
 ## Security and privacy
 
 - **Your data stays on your device.** Photos and entries are never uploaded. Clearing site data, or losing the device, loses the collection unless you exported it.
-- **Fonts are loaded from Google Fonts** (`src/index.css`), so Google receives a request from your device when the app loads online.
+- **Fonts are self-hosted** (`src/assets/fonts`, SIL Open Font License). The app makes no third-party requests; CI fails if a third-party font, analytics or tracking host appears in the code or build.
 - **Numbers alone can't be trusted; photos can be checked.** Without a server, anything a device sends (a QR code, a file) can be edited by a determined person. So QR scores are labelled "self-reported", backup checksums only detect accidental damage, and teachers grade by reviewing the actual photos in each student's review file.
 - A random device ID is stored on each device and shared only inside QR codes and files the user chooses to share.
 - Imported archives are checked against the expected structure and string lengths are capped before storage.
@@ -104,7 +115,6 @@ pnpm run deploy   # runs: vercel --prod (requires a logged-in Vercel CLI)
 - **Background reminders** need Periodic Background Sync (Chromium, installed app). The browser decides the exact timing.
 - **Text recognition** is unavailable in most browsers (see above).
 - Browser Back leaves the app (views aren't URLs yet).
-- Fonts load from Google Fonts when online.
 - There are no automated tests in the repository yet; fixes were verified with browser scripts during the audit.
 
 ## Contributing

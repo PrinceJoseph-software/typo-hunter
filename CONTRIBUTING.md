@@ -16,7 +16,7 @@ Thanks for your interest in Typo Hunter! Ideas, bug reports and improvements are
 4. Check your change on a phone-sized screen, since most people use the app on a phone.
 5. Open a **pull request to `main`** that explains what changed and why.
 
-The owner will review it, may ask for changes, and merges it once it's been checked.
+Automatic checks (CI) run on every pull request: type check, build, offline cache and a no-third-party-requests check. They must pass before merging. The owner then reviews it, may ask for changes, and merges it once it's been checked.
 
 ## Making your own version
 
