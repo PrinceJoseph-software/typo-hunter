@@ -131,6 +131,7 @@ All payloads are JSON. Device ids let rosters and squads tell people apart; name
 
 - The checksum is SHA-256 over the header fields plus a per-entry hash list. It detects accidental damage. It is **not** a signature.
 - If `ownerId` equals this device's id, the import restores the entries and merges the ledger.
+- **New phone:** if this device has no entries of its own and no locked points yet, the user is asked whether the file is their own backup. "Yes" restores it like an own backup (older files without a ledger get their points locked at current values); "No" imports it view-only. This is an honour-system choice, like the rest of the offline app.
 - Otherwise the entries are imported as `origin: 'imported'` (view-only, 0 points).
 - v2 and v1 files are still accepted and imported as view-only.
 

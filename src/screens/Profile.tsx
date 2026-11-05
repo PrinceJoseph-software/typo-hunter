@@ -30,7 +30,7 @@ import {
 } from '../components/Icons';
 import { CuratorPassModal } from '../components/CuratorPassModal';
 import { PrivacyModal } from '../components/PrivacyModal';
-import { createArchiveExportBlob, downloadBlob, verifyAndUnpackArchive } from '../utils/archiveSecurity';
+import { createArchiveExportBlob, downloadBlob, verifyAndUnpackArchive, VerificationResult } from '../utils/archiveSecurity';
 import { calculateSpecimenScore } from '../utils/proofOfSighting';
 import { useHunterPoints } from '../hooks/useHunterPoints';
 import { pointsLedger } from '../utils/pointsLedger';
@@ -125,6 +125,72 @@ export const Profile: React.FC<ProfileProps> = ({
   };
 
   // Backup import: own backup restores; anyone else's becomes view-only
+  /**
+   * A phone whose collection has no entries of its own and no locked points yet
+   * (a new or reset phone) may restore a backup made on another phone, points included.
+   * Once it has its own finds, other people's files can only be added view-only.
+   */
+  const isFreshDevice = discoveries.every(d => d.origin === 'imported') && pointsLedger.getTotal() === 0;
+  const [pendingImport, setPendingImport] = useState<VerificationResult | null>(null);
+
+  // 'restore' = the user's own backup: entries count and locked points come back.
+  // 'view'    = someone else's file: view-only copies that never count toward points.
+  const applyImport = async (result: VerificationResult, mode: 'restore' | 'view') => {
+    let importedCount = 0;
+    let nextNumber = await dbService.getNextDiscoveryNumber();
+    const sourceKey = (result.ownerId || result.hunterName || 'unknown').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'unknown';
+    const restored: Discovery[] = [];
+    for (const item of result.discoveries) {
+      try {
+        if (mode === 'restore') {
+          restored.push(await dbService.saveDiscovery({ ...item, origin: 'own', sourceHunter: undefined }));
+        } else {
+          const foreignId = `imp_${sourceKey}_${String(item.id).slice(0, 40)}`;
+          const existing = discoveries.find(d => d.id === foreignId);
+          await dbService.saveDiscovery({
+            ...item,
+            id: foreignId,
+            discoveryNumber: existing ? existing.discoveryNumber : nextNumber++,
+            origin: 'imported',
+            sourceHunter: item.sourceHunter || result.hunterName || 'another hunter',
+            duplicateOf: undefined,
+          });
+        }
+        importedCount++;
+      } catch {
+        // Skip invalid records
+      }
+    }
+    if (mode === 'restore') {
+      if (result.pointsLedger) {
+        await pointsLedger.merge(result.pointsLedger);
+      } else {
+        // Older backups carry no ledger: lock the points the restored entries earn now.
+        for (const d of restored) await pointsLedger.lockDiscovery(d);
+      }
+    }
+
+    if (importedCount > 0) {
+      onImportComplete();
+      setImportFeedback({
+        type: 'success',
+        message:
+          mode === 'restore'
+            ? `Restored ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} and your locked points (${pointsLedger.getTotal()} pts).`
+            : `Added ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} from ${result.hunterName || 'another hunter'}. Imported entries are view-only and don't count toward your points.`,
+      });
+    } else {
+      setImportFeedback({ type: 'error', message: 'No valid entries could be read from this file.' });
+    }
+    setTimeout(() => setImportFeedback({ type: 'idle', message: '' }), 6000);
+  };
+
+  const resolvePendingImport = async (mode: 'restore' | 'view' | 'cancel') => {
+    const result = pendingImport;
+    setPendingImport(null);
+    if (result && mode !== 'cancel') await applyImport(result, mode);
+  };
+
   const importJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -150,49 +216,14 @@ export const Profile: React.FC<ProfileProps> = ({
           return;
         }
 
-        // Your own backup → restore entries and locked points.
-        // Anyone else's file → view-only copies that never count toward your points.
-        let importedCount = 0;
-        let nextNumber = await dbService.getNextDiscoveryNumber();
-        const sourceKey = (result.ownerId || result.hunterName || 'unknown').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'unknown';
-        for (const item of result.discoveries) {
-          try {
-            if (result.isOwnBackup) {
-              await dbService.saveDiscovery({ ...item, origin: 'own' });
-            } else {
-              const foreignId = `imp_${sourceKey}_${String(item.id).slice(0, 40)}`;
-              const existing = discoveries.find(d => d.id === foreignId);
-              await dbService.saveDiscovery({
-                ...item,
-                id: foreignId,
-                discoveryNumber: existing ? existing.discoveryNumber : nextNumber++,
-                origin: 'imported',
-                sourceHunter: item.sourceHunter || result.hunterName || 'another hunter',
-                duplicateOf: undefined,
-              });
-            }
-            importedCount++;
-          } catch {
-            // Skip invalid records
-          }
-        }
-        if (result.isOwnBackup && result.pointsLedger) {
-          await pointsLedger.merge(result.pointsLedger);
-        }
-
-        if (importedCount > 0) {
-          onImportComplete();
-          setImportFeedback({
-            type: 'success',
-            message: result.isOwnBackup
-              ? `Restored ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} and your locked points from your backup.`
-              : `Added ${importedCount} entr${importedCount === 1 ? 'y' : 'ies'} from ${result.hunterName || 'another hunter'}. Imported entries are view-only and don't count toward your points.`,
-          });
+        if (result.isOwnBackup) {
+          await applyImport(result, 'restore');
+        } else if (isFreshDevice) {
+          // New phone with nothing of its own yet: ask whether this is the user's own backup.
+          setPendingImport(result);
+          return;
         } else {
-          setImportFeedback({
-            type: 'error',
-            message: 'No valid entries could be read from this file.',
-          });
+          await applyImport(result, 'view');
         }
         setTimeout(() => setImportFeedback({ type: 'idle', message: '' }), 5000);
       } catch {
@@ -562,6 +593,41 @@ export const Profile: React.FC<ProfileProps> = ({
             Everything lives only on this device. Export a backup regularly: clearing site data or losing the phone deletes your museum. Restoring your own backup brings back your locked points; importing a friend's file adds their entries as view-only.
           </p>
         </div>
+
+        {pendingImport && (
+          <div className="border-2 border-black bg-[#FFF9EC] p-3.5 rounded-xl font-mono text-xs space-y-2" role="group" aria-labelledby="restore-question">
+            <p id="restore-question" className="font-bold text-black">
+              Is this your own backup{pendingImport.hunterName ? ` ("${pendingImport.hunterName}")` : ''} from another phone?
+            </p>
+            <p className="text-gray-700">
+              This phone has no finds of its own yet, so you can restore your collection here with your locked points.
+              Only do this with your own backup: a friend's file should be added as view-only.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => resolvePendingImport('restore')}
+                className="flex-1 btn-primary py-2.5 rounded-xl text-[11px] font-extrabold uppercase cursor-pointer"
+              >
+                Yes, restore my collection
+              </button>
+              <button
+                type="button"
+                onClick={() => resolvePendingImport('view')}
+                className="flex-1 btn-secondary py-2.5 rounded-xl text-[11px] font-bold uppercase cursor-pointer"
+              >
+                No, add as view-only
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => resolvePendingImport('cancel')}
+              className="text-[11px] text-gray-600 underline cursor-pointer"
+            >
+              Cancel import
+            </button>
+          </div>
+        )}
 
         {/* Dynamic Verification Feedback Banners */}
         {importFeedback.type === 'success' && (
