@@ -205,34 +205,6 @@ export const pvpService = {
   },
 
   /**
-   * Deterministically generates or calculates a rival challenger for quick offline duels.
-   */
-  generateChallenger(playerPoints: number, playerTeamId: string) {
-    const opponentTeams = PRESET_TEAMS.filter(t => t.id !== playerTeamId);
-    const opponentTeam = opponentTeams[Math.floor(Math.random() * opponentTeams.length)] || PRESET_TEAMS[1];
-    
-    const rivalNames = [
-      'Curator Jax', 'Professor Sterling', 'RedPen_Vance', 'Scout Miller',
-      'The Orthographer', 'Linguist Nova', 'SignHunter_Kai', 'Madame Comma'
-    ];
-    const opponentName = rivalNames[Math.floor(Math.random() * rivalNames.length)];
-
-    // Target score fluctuates +/- 25% around player score for competitive parity
-    const variance = (Math.random() * 0.5) - 0.22; // -22% to +28%
-    const opponentScore = Math.max(50, Math.round(playerPoints * (1 + variance)));
-    const opponentSpecimens = Math.max(1, Math.round(opponentScore / 75));
-    const opponentLegends = Math.floor(Math.random() * Math.min(4, opponentSpecimens + 1));
-
-    return {
-      opponentName,
-      opponentTeam,
-      opponentScore,
-      opponentSpecimens,
-      opponentLegends,
-    };
-  },
-
-  /**
    * Evaluates a battle and records the outcome.
    */
   resolveDuel(

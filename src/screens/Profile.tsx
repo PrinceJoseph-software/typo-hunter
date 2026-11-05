@@ -24,7 +24,6 @@ import {
   IconClose,
   IconAlert,
   IconDownload,
-  IconRefresh,
   IconSwords,
   IconCamera,
   IconGraduationCap,
@@ -40,7 +39,6 @@ interface ProfileProps {
   nickname: string;
   onUpdateNickname: (name: string) => void;
   onImportComplete: () => void;
-  onResetSample?: () => void;
   onOpenHelp?: () => void;
   onOpenPvp?: () => void;
   onOpenTeacherMode?: () => void;
@@ -54,7 +52,6 @@ export const Profile: React.FC<ProfileProps> = ({
   nickname, 
   onUpdateNickname, 
   onImportComplete, 
-  onResetSample, 
   onOpenHelp,
   onOpenPvp,
   onOpenTeacherMode,
@@ -280,16 +277,6 @@ export const Profile: React.FC<ProfileProps> = ({
           <p className="text-xs font-mono text-gray-600 max-w-sm mx-auto leading-relaxed mb-3">
             Your curatorial points, category exploration, and milestone awards will activate once you log your first specimen in the wild.
           </p>
-          {onResetSample && (
-            <button
-              type="button"
-              onClick={onResetSample}
-              className="btn-secondary py-2 px-4 rounded-xl text-xs uppercase font-bold tracking-wider inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <IconRefresh size={12} />
-              <span>Load Sample Archive to Preview</span>
-            </button>
-          )}
         </div>
       )}
 
@@ -611,18 +598,6 @@ export const Profile: React.FC<ProfileProps> = ({
           </label>
         </div>
 
-        {onResetSample && (
-          <div className="pt-3 border-t border-black/10 flex justify-between items-center">
-            <span className="text-[11px] font-mono text-gray-500">Curator demo data:</span>
-            <button
-              onClick={onResetSample}
-              className="text-xs font-mono font-bold text-[#D66A4A] hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <span>Reset to Sample Archive</span>
-              <IconRefresh size={12} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Curator Session & Privacy Rights */}

@@ -328,6 +328,7 @@ Typo Hunter features an offline-first peer-to-peer multiplayer competition suite
 
 2. **Quick Duel (Curator Pass Battle)**:
    - Tap **'Scan Rival Pass & Battle'** to point the camera at any friend's standard Curator Field Pass QR.
+   - There are no random or simulated opponents: the rival is always a real friend, either scanned from their pass or entered by hand (name + score).
    - The scanner instantly parses the friend's verifiable specimen count, curatorial points, and Hall of Fame legends.
    - Compares metrics in an editorial head-to-head match and determines Victory, Defeat, or Draw.
 

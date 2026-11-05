@@ -35,7 +35,6 @@ import {
   IconUsers,
   IconTrophy,
   IconCheck,
-  IconRefresh,
   IconQrCode,
   IconCamera,
   IconDownload,
@@ -73,9 +72,14 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
   const specimenCount = discoveries.length;
   const legendCount = discoveries.filter(d => d.isHallOfFame).length;
 
-  const [challenger, setChallenger] = useState(() => {
-    return pvpService.generateChallenger(totalPoints, currentTeam.id);
-  });
+  // Quick Duel opponent: only ever a real friend (scanned pass or manually entered score).
+  const [challenger, setChallenger] = useState<{
+    opponentName: string;
+    opponentTeam: CuratorTeam;
+    opponentScore: number;
+    opponentSpecimens: number;
+    opponentLegends: number;
+  } | null>(null);
   const [duelResult, setDuelResult] = useState<PvpMatchRecord | null>(null);
   const [customOpponentScore, setCustomOpponentScore] = useState<string>('');
   const [customOpponentName, setCustomOpponentName] = useState<string>('');
@@ -293,7 +297,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
       opponentTeam: {
         id: 'scanned',
         name: passData.team || 'Rival Curators',
-        tag: (passData.hunter.slice(0, 3) || 'RIV').toUpperCase(),
+        tag: passData.teamTag || (passData.hunter.slice(0, 3) || 'RIV').toUpperCase(),
         motto: 'Optical Peer Challenger',
         badgeBg: '#282722',
         badgeText: '#E8B92D',
@@ -318,17 +322,15 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     setStats(pvpService.getPvpStats());
   };
 
-  const handleRerollChallenger = () => {
-    setChallenger(pvpService.generateChallenger(totalPoints, currentTeam.id));
-    setDuelResult(null);
-  };
+  const manualScore = parseInt(customOpponentScore, 10);
+  const hasManualRival = customOpponentName.trim().length > 0 && Number.isFinite(manualScore) && manualScore >= 0;
+  const canDuel = !!challenger || hasManualRival;
 
   const handleExecuteDuel = () => {
-    const oppName = customOpponentName.trim() || challenger.opponentName;
-    const oppTeam = challenger.opponentTeam.name;
-    const oppScore = customOpponentScore.trim()
-      ? parseInt(customOpponentScore, 10) || challenger.opponentScore
-      : challenger.opponentScore;
+    if (!canDuel) return;
+    const oppName = customOpponentName.trim() || challenger!.opponentName;
+    const oppTeam = challenger?.opponentTeam.name || 'Friend';
+    const oppScore = hasManualRival ? manualScore : challenger!.opponentScore;
 
     const result = pvpService.resolveDuel(
       nickname,
@@ -590,17 +592,10 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       setScannerMode('pass');
                       setShowQrScanner(true);
                     }}
-                    className="flex-1 btn-secondary py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5 shadow-brutal-sm"
+                    className="flex-1 btn-primary py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer flex items-center justify-center gap-1.5 shadow-brutal-sm"
                   >
                     <IconQrCode size={14} className="text-[#D66A4A]" />
                     <span>Scan Rival Pass & Battle</span>
-                  </button>
-                  <button
-                    onClick={handleRerollChallenger}
-                    className="btn-secondary py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
-                    title="Find random simulated challenger"
-                  >
-                    <IconRefresh size={14} />
                   </button>
                 </div>
 
@@ -634,26 +629,32 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     </div>
 
                     {/* Opponent Side */}
+                    {challenger || hasManualRival ? (
                     <div className="col-span-2 bg-[#FAF6EE] p-2.5 rounded-xl border border-black/20">
                       <span
                         className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border border-black block mb-1 truncate"
                         style={{
-                          backgroundColor: challenger.opponentTeam.badgeBg,
-                          color: challenger.opponentTeam.badgeText,
+                          backgroundColor: challenger?.opponentTeam.badgeBg || '#282722',
+                          color: challenger?.opponentTeam.badgeText || '#E8B92D',
                         }}
                       >
-                        [{challenger.opponentTeam.tag}] {challenger.opponentTeam.name}
+                        [{challenger?.opponentTeam.tag || 'FRND'}] {challenger?.opponentTeam.name || 'Friend'}
                       </span>
                       <h3 className="font-heading font-extrabold text-sm text-black truncate">
-                        {customOpponentName.trim() || challenger.opponentName}
+                        {customOpponentName.trim() || challenger?.opponentName}
                       </h3>
                       <div className="mt-1 font-heading font-extrabold text-2xl text-black leading-none">
-                        {customOpponentScore.trim() ? customOpponentScore : challenger.opponentScore}
+                        {hasManualRival ? manualScore : challenger?.opponentScore}
                       </div>
                       <span className="text-[8px] font-mono uppercase text-gray-500 font-bold block mt-0.5">
-                        {challenger.opponentSpecimens} Specs · {challenger.opponentLegends} Legends
+                        {challenger ? `${challenger.opponentSpecimens} Specs · ${challenger.opponentLegends} Legends` : 'Manual entry'}
                       </span>
                     </div>
+                    ) : (
+                      <div className="col-span-2 p-2.5 rounded-xl border-2 border-dashed border-black/30 text-[10px] font-mono text-gray-500">
+                        Waiting for a rival. Scan their Curator Pass QR.
+                      </div>
+                    )}
                   </div>
 
                   {/* Duel Outcome Banner */}
@@ -728,7 +729,8 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                 {/* Execute Battle Button */}
                 <button
                   onClick={handleExecuteDuel}
-                  className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal flex items-center justify-center gap-1.5"
+                  disabled={!canDuel}
+                  className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <IconSwords size={14} />
                   <span>Execute PvP Battle</span>

@@ -16,7 +16,6 @@
  */
 
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { SAMPLE_DISCOVERIES } from '../utils/sampleData';
 
 /**
  * Core domain entity representing an archived typographical specimen.
@@ -158,10 +157,14 @@ export function validateDiscovery(input: unknown): Discovery {
   };
 }
 
+/** Id prefix of the demo specimens older versions seeded on first launch. */
+const LEGACY_SAMPLE_PREFIX = 'sample_typo_';
+
 export const dbService = {
   /**
    * Retrieves all cataloged discoveries ordered newest-to-oldest.
-   * Automatically hydrates the collection with sample discoveries on first launch.
+   * New curators start with an empty museum; sample specimens seeded by older
+   * versions of the app are purged on read.
    */
   async getAllDiscoveries(): Promise<Discovery[]> {
     try {
@@ -170,15 +173,16 @@ export const dbService = {
       const index = tx.store.index('by-date');
       const items = await index.getAll();
 
-      // On clean cold start: initialize museum with realistic curated sample specimens
-      if (items.length === 0) {
-        for (const sample of SAMPLE_DISCOVERIES) {
-          await this.saveDiscovery(sample);
+      const legacySamples = items.filter(d => d.id.startsWith(LEGACY_SAMPLE_PREFIX));
+      if (legacySamples.length > 0) {
+        const wtx = db.transaction('discoveries', 'readwrite');
+        for (const sample of legacySamples) {
+          await wtx.store.delete(sample.id);
         }
-        return [...SAMPLE_DISCOVERIES].reverse();
+        await wtx.done;
       }
 
-      return items.reverse();
+      return items.filter(d => !d.id.startsWith(LEGACY_SAMPLE_PREFIX)).reverse();
     } catch (err) {
       console.error('[IndexedDB] Failed to query all discoveries:', err);
       return [];
@@ -223,19 +227,6 @@ export const dbService = {
       const count = await db.count('discoveries');
       return count + 1;
     }
-  },
-
-  /**
-   * Resets the entire local archive back to canonical curated museum specimens.
-   */
-  async resetToSampleData(): Promise<void> {
-    const db = await getDB();
-    const tx = db.transaction('discoveries', 'readwrite');
-    await tx.store.clear();
-    for (const sample of SAMPLE_DISCOVERIES) {
-      await tx.store.put(sample);
-    }
-    await tx.done;
   },
 
   /**

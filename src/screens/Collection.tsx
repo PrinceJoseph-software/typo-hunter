@@ -21,14 +21,12 @@ interface CollectionProps {
   discoveries: Discovery[];
   onSelectDiscovery: (id: string) => void;
   onNavigateCapture: () => void;
-  onResetSample?: () => void;
 }
 
 export const Collection: React.FC<CollectionProps> = ({
   discoveries,
   onSelectDiscovery,
   onNavigateCapture,
-  onResetSample,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -354,15 +352,6 @@ export const Collection: React.FC<CollectionProps> = ({
                 <IconCamera size={14} />
                 <span>Spot a Typo Now</span>
               </button>
-              {onResetSample && (
-                <button
-                  type="button"
-                  onClick={onResetSample}
-                  className="btn-secondary py-2.5 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
-                >
-                  Load Sample Archive (Demo)
-                </button>
-              )}
             </div>
           )}
         </div>
