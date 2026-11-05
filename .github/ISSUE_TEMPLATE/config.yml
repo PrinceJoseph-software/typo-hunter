@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/PrinceJoseph-software/typo-hunter/security/advisories/new
+    about: Please report security problems privately here, not as a public issue.
+  - name: Privacy policy
+    url: https://github.com/PrinceJoseph-software/typo-hunter/blob/main/PRIVACY.md
+    about: What the app stores and shares.

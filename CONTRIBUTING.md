@@ -22,15 +22,18 @@ The owner will review it, may ask for changes, and merges it once it's been chec
 
 Typo Hunter is MIT-licensed, so you're free to fork it and build your own variation: a different theme, a version for one school, another language. You don't need permission. Please keep the licence notice. If you build something you think belongs in the main app, open a pull request.
 
-## Reporting problems
+## Reporting problems and ideas
 
-Open an issue that describes:
-- what you did,
-- what you expected,
-- what happened instead,
-- your device and browser.
+Something broken, confusing or missing? **[Open an issue](https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose)** and pick a form:
 
-Please don't include photos of people or private information in issues.
+- **Report a problem:** something isn't working, looks wrong, or lost data.
+- **Suggest an idea:** a new feature or an improvement.
+
+The forms ask for what happened, the steps to reproduce it, and your device and browser. That's usually all that's needed to fix it. You can also reach the form from inside the app: **Help → Something Wrong? → Report a problem**.
+
+Please don't post photos of people, students' names or other private details in issues.
+
+**Security or privacy problems** should be reported privately instead. See [SECURITY.md](SECURITY.md).
 
 ## Ground rules
 

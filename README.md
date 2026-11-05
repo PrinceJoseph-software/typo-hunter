@@ -59,6 +59,7 @@ Hotel signs, airport announcements and translated menus are a goldmine. Capture 
 
 ## More
 
+- **Found a problem or have an idea? [Open an issue](https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose)**
 - [Privacy policy](PRIVACY.md)
 - [Development guide](docs/DEVELOPMENT.md): run, build and deploy it yourself
 - [Architecture reference](docs/ARCHITECTURE.md)

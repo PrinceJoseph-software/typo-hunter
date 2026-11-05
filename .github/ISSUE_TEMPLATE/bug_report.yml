@@ -1,0 +1,72 @@
+name: Report a problem
+description: Something isn't working, looks wrong, or lost data.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Typo Hunter! Please **don't include photos of people, faces, or private details** (names of students, addresses). Screenshots of the app are welcome.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem.
+      placeholder: When I tap "Archive Specimen", the button stays on "Saving…"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, step by step?
+      placeholder: |
+        1. Open Speed Blitz
+        2. Take two photos
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      options:
+        - Taking / saving photos
+        - Archive, Legends or details
+        - Points
+        - Quick Duel
+        - Speed Blitz
+        - Squad battles
+        - Teacher Mode / class hunts
+        - Backup & restore
+        - Reminders / notifications
+        - Offline / installing the app
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: iPhone 14, Safari / Pixel 7, Chrome / Windows laptop, Edge
+    validations:
+      required: true
+  - type: dropdown
+    id: installed
+    attributes:
+      label: Are you using the installed app (added to home screen)?
+      options:
+        - "Yes"
+        - "No, in the browser"
+        - Not sure
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots (without personal information), how often it happens, etc.
