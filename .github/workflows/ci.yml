@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Type check, build and privacy checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies (exactly as locked)
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+
+      - name: Production build
+        run: pnpm build
+
+      - name: Offline cache includes the built files
+        run: |
+          if grep -q "__PRECACHE_START__\|'dev'; /\*__BUILD_VERSION__\*/" dist/sw.js; then
+            echo "::error file=public/sw.js::The service worker precache list was not generated."
+            exit 1
+          fi
+          for f in dist/assets/*; do
+            name="/assets/$(basename "$f")"
+            grep -qF "\"$name\"" dist/sw.js || { echo "::error::$name is missing from the offline precache list"; exit 1; }
+          done
+          echo "All built assets are precached."
+
+      - name: No third-party fonts, analytics or trackers
+        run: |
+          if grep -rEn "fonts\.(googleapis|gstatic)\.com|google-analytics\.com|googletagmanager\.com|doubleclick\.net|facebook\.net|segment\.(io|com)|hotjar\.com" dist src public; then
+            echo "::error::Found a third-party request. Typo Hunter must not contact external services (see PRIVACY.md)."
+            exit 1
+          fi
+          echo "No third-party hosts found."
+
+      - name: Known vulnerabilities in app dependencies
+        run: pnpm audit --prod --audit-level=high

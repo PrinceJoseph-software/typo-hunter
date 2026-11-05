@@ -1,8 +1,7 @@
-/* Self-hosted font stack — works fully offline without Google Fonts dependency.
-   Falls back gracefully to visually-similar system fonts that preserve the editorial character. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
+/* Self-hosted fonts: bundled with the app, no third-party requests (see assets/fonts). */
+@import './assets/fonts/fonts.css';
 
-/* Offline-safe system font fallback: if Google Fonts fail, use visually close system alternatives */
+/* System fonts are the fallback for characters outside the bundled latin subsets. */
 
 @tailwind base;
 @tailwind components;

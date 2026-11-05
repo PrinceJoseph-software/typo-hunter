@@ -102,10 +102,15 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
               </li>
               <li>
                 <strong>Opening the app online.</strong> Like any website, our hosting provider receives standard
-                technical information (such as your IP address and browser type). Fonts load from Google Fonts, so
-                Google receives a similar request. Neither includes your photos or collection.
+                technical information (such as your IP address and browser type) when you open or update it. That
+                never includes your photos or collection.
               </li>
             </ol>
+            <p>
+              <strong>No third parties.</strong> Everything the app needs, including its fonts, comes from the app's
+              own site. It makes no requests to Google, advertisers, analytics services or anyone else, and works
+              offline once opened.
+            </p>
           </Section>
 
           <Section title="Camera and notifications">

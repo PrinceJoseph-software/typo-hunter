@@ -142,6 +142,6 @@ The build step (`typoHunterPrecache` in `vite.config.ts`) writes every output fi
 - **Activate:** deletes old versions.
 - **Navigations:** network first, falling back to the cached shell.
 - **`/assets/*`:** cache first.
-- **Google Fonts:** separate long-lived cache.
+- **Fonts:** self-hosted in `src/assets/fonts` (latin + latin-ext subsets) and precached like every other built file. The old Google Fonts cache is deleted on activate.
 - **Cache lookups:** by URL with `ignoreVary`, because the precache request and the module-script request differ in their `Origin` header.
 - **`periodicsync` (`typo-hunter-reminders`):** reads settings and the last capture time from IndexedDB, then shows at most one inactivity nudge per 20 hours and one daily prompt per day. The page can trigger the same check with `postMessage({ type: 'CHECK_REMINDERS' })`.
