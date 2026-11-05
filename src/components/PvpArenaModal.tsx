@@ -6,15 +6,17 @@
  * ARCHITECTURAL DESIGN:
  * Operates offline with zero server dependencies:
  *   - Optical Battle Scan: Scan a rival's pass to retrieve their live metrics and battle.
- *   - Sudden Death on Draw: If scores are tied, launches an immediate 2-min sudden death sprint.
+ *   - Speed Blitz: both players start at 0; at the end they swap result QRs to settle.
  *   - Real-Time Opponent Score Tracking: Opponent's baseline score is transmitted via QR.
  *   - Shareable Victory Placards: Exports 1080x1350 JPEG placards via HTML5 Canvas.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import QRCode from 'qrcode';
 import { Discovery } from '../db/database';
-import { calculateTotalCuratorPoints } from '../utils/proofOfSighting';
+import { useHunterPoints } from '../hooks/useHunterPoints';
+import { getDeviceId } from '../utils/identity';
 import {
   pvpService,
   CuratorTeam,
@@ -47,12 +49,15 @@ interface PvpArenaModalProps {
   nickname: string;
   discoveries: Discovery[];
   onStartSpeedBlitz: (blitz: {
+    battleId: string;
+    role: 'host' | 'join';
     opponentName: string;
     opponentTeam: string;
     opponentTeamTag: string;
-    opponentScore: number;
     durationMinutes: number;
   }) => void;
+  /** Open on a specific tab (e.g. after a blitz, to start a rematch). */
+  initialTab?: 'timer' | 'duel' | 'team' | 'history';
 }
 
 export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
@@ -61,14 +66,21 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
   nickname,
   discoveries,
   onStartSpeedBlitz,
+  initialTab,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   const [activeTab, setActiveTab] = useState<'timer' | 'duel' | 'team' | 'history'>('timer');
+  useEffect(() => {
+    if (isOpen && initialTab) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
   const [currentTeam, setCurrentTeam] = useState<CuratorTeam>(() => pvpService.getCurrentTeam());
   const [history, setHistory] = useState<PvpMatchRecord[]>([]);
   const [stats, setStats] = useState(pvpService.getPvpStats());
 
   // Quick Duel State
-  const totalPoints = calculateTotalCuratorPoints(discoveries);
+  const totalPoints = useHunterPoints();
   const specimenCount = discoveries.length;
   const legendCount = discoveries.filter(d => d.isHallOfFame).length;
 
@@ -123,6 +135,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
           legends: legendCount,
           teamTag: activeTeam.tag,
           isHost: true,
+          deviceId: getDeviceId(),
         }),
       ]);
 
@@ -136,7 +149,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
   // Generate Speed Blitz QR for host
   const handleGenerateBlitzQr = (duration: 3 | 5 | 10) => {
     setHuntDuration(duration);
-    const payload = pvpService.createSpeedBlitzPayload(nickname, duration, totalPoints);
+    const payload = pvpService.createSpeedBlitzPayload(nickname, duration, getDeviceId());
     setHostedBlitzPayload(payload);
 
     QRCode.toDataURL(JSON.stringify(payload), {
@@ -156,16 +169,17 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     if (isOpen && activeTab === 'timer' && blitzSubTab === 'host') {
       handleGenerateBlitzQr(huntDuration);
     }
-  }, [isOpen, activeTab, blitzSubTab, nickname, totalPoints]);
+  }, [isOpen, activeTab, blitzSubTab, nickname]);
 
   const handleHostStartBlitz = () => {
     if (!hostedBlitzPayload) return;
     onClose();
     onStartSpeedBlitz({
-      opponentName: 'Challenger in Field',
-      opponentTeam: 'Rival Squad',
+      battleId: hostedBlitzPayload.battleId,
+      role: 'host',
+      opponentName: 'your rival',
+      opponentTeam: 'Rival',
       opponentTeamTag: 'VS',
-      opponentScore: totalPoints,
       durationMinutes: hostedBlitzPayload.durationMinutes,
     });
   };
@@ -174,10 +188,11 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     setShowQrScanner(false);
     onClose();
     onStartSpeedBlitz({
+      battleId: payload.battleId,
+      role: 'join',
       opponentName: payload.hostName,
       opponentTeam: payload.hostTeam,
       opponentTeamTag: payload.hostTeamTag,
-      opponentScore: payload.hostScore,
       durationMinutes: payload.durationMinutes,
     });
   };
@@ -242,6 +257,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     team?: string;
     teamTag?: string;
     checksum?: string;
+    deviceId?: string;
   }) => {
     setShowQrScanner(false);
 
@@ -249,7 +265,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     if (scannerTargetTeam) {
       const isAlpha = scannerTargetTeam === 'teamA';
       const fingerprint = pvpService.passFingerprint(passData.hunter, passData.checksum);
-      const duplicateIn = pvpService.findDuplicateHunter(squadTeamA, squadTeamB, passData.hunter, fingerprint);
+      const duplicateIn = pvpService.findDuplicateHunter(squadTeamA, squadTeamB, passData.hunter, fingerprint, passData.deviceId);
       setScannerTargetTeam(null);
       setActiveTab('team');
       setSquadSubTab('battle');
@@ -270,6 +286,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
         teamTag: passData.teamTag || fallbackTag,
         passFingerprint: fingerprint,
         verified: true,
+        deviceId: passData.deviceId,
       });
 
       const nextA = isAlpha ? [...squadTeamA, newMember] : squadTeamA;
@@ -382,7 +399,8 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     <>
       <div
         className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs select-none"
-        role="dialog"
+        ref={dialogRef}
+      role="dialog"
         aria-modal="true"
         aria-label="P2P Multiplayer Arena"
       >
@@ -395,7 +413,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                   Offline P2P Multiplayer
                 </span>
                 <span
-                  className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-black uppercase shadow-xs"
+                  className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded border border-black uppercase shadow-xs"
                   style={{ backgroundColor: currentTeam.badgeBg, color: currentTeam.badgeText }}
                 >
                   [{currentTeam.tag}] {currentTeam.name}
@@ -496,7 +514,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       Speed Blitz Battle QR
                     </h3>
                     <p className="text-[11px] font-mono text-gray-600 mt-0.5 max-w-xs mx-auto">
-                      Have your rival scan this QR. The scan transmits your name & score target, and routes both of you to the Capture screen to hunt!
+                      Your rival scans this QR, then you both tap start. Each of you starts at 0, and only photos taken during the round count. When time's up, swap result QRs to see who won.
                     </p>
 
                     {/* Duration Buttons */}
@@ -529,8 +547,8 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                           Generating QR…
                         </div>
                       )}
-                      <span className="text-[9px] font-mono font-bold uppercase text-gray-700 block mt-1">
-                        [{currentTeam.tag}] {nickname} · Target: {totalPoints} pts · {huntDuration}m
+                      <span className="text-[10px] font-mono font-bold uppercase text-gray-700 block mt-1">
+                        [{currentTeam.tag}] {nickname} · {huntDuration} min · both start at 0
                       </span>
                     </div>
 
@@ -555,7 +573,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       Join Rival's Speed Blitz
                     </h3>
                     <p className="text-xs font-mono text-gray-600 max-w-xs mx-auto leading-relaxed">
-                      Scan your friend's screen. The scanner instantly decodes their name, team, and score target, activates the live timer, and jumps directly to your camera!
+                      Scan the host's Speed Blitz QR. Your timer starts right away and you go straight to the camera. When time's up, swap result QRs to settle it.
                     </p>
 
                     <div className="p-4 bg-[#FAF6EE] rounded-2xl border-2 border-dashed border-black my-2 flex flex-col items-center justify-center gap-2">
@@ -605,7 +623,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     {/* Player Side */}
                     <div className="col-span-2 bg-[#FAF6EE] p-2.5 rounded-xl border border-black/20">
                       <span
-                        className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border border-black block mb-1 truncate"
+                        className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border border-black block mb-1 truncate"
                         style={{ backgroundColor: currentTeam.badgeBg, color: currentTeam.badgeText }}
                       >
                         [{currentTeam.tag}] {currentTeam.name}
@@ -616,7 +634,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       <div className="mt-1 font-heading font-extrabold text-2xl text-black leading-none">
                         {totalPoints}
                       </div>
-                      <span className="text-[8px] font-mono uppercase text-gray-500 font-bold block mt-0.5">
+                      <span className="text-[10px] font-mono uppercase text-gray-500 font-bold block mt-0.5">
                         {specimenCount} Specs · {legendCount} Legends
                       </span>
                     </div>
@@ -632,7 +650,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     {challenger || hasManualRival ? (
                     <div className="col-span-2 bg-[#FAF6EE] p-2.5 rounded-xl border border-black/20">
                       <span
-                        className="text-[8px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border border-black block mb-1 truncate"
+                        className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border border-black block mb-1 truncate"
                         style={{
                           backgroundColor: challenger?.opponentTeam.badgeBg || '#282722',
                           color: challenger?.opponentTeam.badgeText || '#E8B92D',
@@ -646,7 +664,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       <div className="mt-1 font-heading font-extrabold text-2xl text-black leading-none">
                         {hasManualRival ? manualScore : challenger?.opponentScore}
                       </div>
-                      <span className="text-[8px] font-mono uppercase text-gray-500 font-bold block mt-0.5">
+                      <span className="text-[10px] font-mono uppercase text-gray-500 font-bold block mt-0.5">
                         {challenger ? `${challenger.opponentSpecimens} Specs · ${challenger.opponentLegends} Legends` : 'Manual entry'}
                       </span>
                     </div>
@@ -678,9 +696,9 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                           ? `You defeated ${duelResult.opponentName} by +${duelResult.pointsDelta} curatorial points!`
                           : duelResult.outcome === 'DEFEAT'
                           ? `You trailed by ${Math.abs(duelResult.pointsDelta)} points. Enshrine more legends to win.`
-                          : `Tied at ${duelResult.playerScore} points! Initiate Sudden-Death to break the tie.`}
+                          : `Tied at ${duelResult.playerScore} points!`}
                       </p>
-                      <span className="text-[9px] text-gray-500 block mt-1">
+                      <span className="text-[10px] text-gray-500 block mt-1">
                         Verification Hash: <code>{duelResult.verificationHash}</code>
                       </span>
 
@@ -697,28 +715,22 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                         </button>
                       </div>
 
-                      {/* Sudden Death Tie-Breaker if DRAW */}
+                      {/* Tie: settle it with a real two-player Speed Blitz */}
                       {duelResult.outcome === 'DRAW' && (
                         <div className="mt-3 pt-2.5 border-t-2 border-black/20 text-center space-y-1.5">
                           <span className="text-[10px] font-mono font-bold uppercase text-[#D66A4A] tracking-wider block">
-                            TIED SCORE DETECTED · INITIATE QUICK DUEL TIE-BREAKER
+                            Tied! Break it with a Speed Blitz
                           </span>
                           <button
                             type="button"
                             onClick={() => {
-                              onClose();
-                              onStartSpeedBlitz({
-                                opponentName: duelResult.opponentName,
-                                opponentTeam: duelResult.opponentTeam,
-                                opponentTeamTag: 'TIE',
-                                opponentScore: duelResult.opponentScore,
-                                durationMinutes: 2, // 2-min sudden death sprint!
-                              });
+                              setActiveTab('timer');
+                              setBlitzSubTab('host');
                             }}
                             className="w-full bg-[#D66A4A] text-white py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer border-2 border-black shadow-brutal flex items-center justify-center gap-1.5 hover:bg-[#c25a3c]"
                           >
                             <IconSwords size={14} />
-                            <span>Launch 2-Min Sudden Death Duel!</span>
+                            <span>Host a Tie-Break Blitz</span>
                           </button>
                         </div>
                       )}
@@ -738,7 +750,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
 
                 {/* Manual Score Input */}
                 <div className="bg-white border-2 border-black rounded-xl p-3 text-xs font-mono">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1.5">
                     Or Enter Rival's Score Manually:
                   </span>
                   <div className="grid grid-cols-2 gap-2">
@@ -794,10 +806,10 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     {/* Scoring Mode Toggle */}
                     <div className="bg-white border-2 border-black rounded-xl p-2.5 space-y-1.5 shadow-xs">
                       <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-bold uppercase text-gray-500">
+                        <span className="text-[10px] font-bold uppercase text-gray-500">
                           Handicap & Scoring Rule:
                         </span>
-                        <span className="text-[9px] font-bold text-[#D66A4A]">
+                        <span className="text-[10px] font-bold text-[#D66A4A]">
                           {squadsUneven
                             ? 'UNEVEN SQUADS · AVERAGE LOCKED'
                             : effectiveScoringMode === 'average' ? 'FAIR HANDICAP ACTIVE' : 'UNSCALED SUM'}
@@ -837,7 +849,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       <div className="bg-[#FFFDF9] p-3 rounded-2xl border-2 border-black shadow-brutal-sm space-y-2">
                         <div className="flex justify-between items-center border-b border-black/10 pb-1.5">
                           <span
-                            className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border border-black"
+                            className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border border-black"
                             style={{ backgroundColor: currentTeam.badgeBg, color: currentTeam.badgeText }}
                           >
                             [{currentTeam.tag}] Team Alpha
@@ -857,7 +869,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                               <div className="truncate mr-1">
                                 <span className="font-bold text-black">{member.nickname}</span>
                                 {member.isHost && (
-                                  <span className="text-[8px] ml-1 bg-black text-[#E8B92D] px-1 rounded font-bold">
+                                  <span className="text-[10px] ml-1 bg-black text-[#E8B92D] px-1 rounded font-bold">
                                     YOU
                                   </span>
                                 )}
@@ -893,7 +905,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                             type="button"
                             onClick={() => handleScanSquadMember('A')}
                             disabled={squadTeamA.length >= SQUAD_RULES.maxTeamSize}
-                            className="w-full btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
+                            className="w-full btn-primary py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
                           >
                             <IconCamera size={10} />
                             <span>Scan Teammate's QR Pass</span>
@@ -904,7 +916,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       {/* TEAM OMEGA (RIVAL SQUAD) */}
                       <div className="bg-[#FFFDF9] p-3 rounded-2xl border-2 border-black shadow-brutal-sm space-y-2">
                         <div className="flex justify-between items-center border-b border-black/10 pb-1.5">
-                          <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border border-black bg-[#282722] text-[#E8B92D]">
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border border-black bg-[#282722] text-[#E8B92D]">
                             [{squadTeamB[0]?.teamTag || 'RIV'}] Team Omega
                           </span>
                           <span className="text-[10px] font-bold text-black">
@@ -956,7 +968,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                             type="button"
                             onClick={() => handleScanSquadMember('B')}
                             disabled={squadTeamB.length >= SQUAD_RULES.maxTeamSize}
-                            className="w-full btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
+                            className="w-full btn-primary py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
                           >
                             <IconCamera size={10} />
                             <span>Scan Rival's QR Pass</span>
@@ -1017,7 +1029,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                             ? `Team Omega led by +${Math.abs(squadClashResult.pointsDelta)} pts.`
                             : `Exact tie across ${squadTeamA.length} vs ${squadTeamB.length} hunters!`}
                         </p>
-                        <span className="text-[9px] text-gray-500 block">
+                        <span className="text-[10px] text-gray-500 block">
                           Ledger Hash: <code>{squadClashResult.verificationHash}</code>
                         </span>
                       </div>
@@ -1065,7 +1077,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                             <div className="pr-2 flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span
-                                  className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border border-black uppercase flex-shrink-0"
+                                  className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-black uppercase flex-shrink-0"
                                   style={{ backgroundColor: team.badgeBg, color: team.badgeText }}
                                 >
                                   {team.tag}
@@ -1074,7 +1086,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                                   {team.name}
                                 </h4>
                                 {isSelected && (
-                                  <span className="text-[8px] font-mono font-bold uppercase bg-[#E8B92D] text-black px-1.5 py-0.2 rounded border border-black flex-shrink-0">
+                                  <span className="text-[10px] font-mono font-bold uppercase bg-[#E8B92D] text-black px-1.5 py-0.2 rounded border border-black flex-shrink-0">
                                     ACTIVE SQUAD
                                   </span>
                                 )}
@@ -1107,19 +1119,19 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                 <div className="grid grid-cols-4 gap-2 text-center font-mono">
                   <div className="bg-white p-2 rounded-xl border border-black/20">
                     <span className="text-xl font-bold font-heading block">{stats.total}</span>
-                    <span className="text-[8px] uppercase text-gray-500 font-bold block">Battles</span>
+                    <span className="text-[10px] uppercase text-gray-500 font-bold block">Battles</span>
                   </div>
                   <div className="bg-white p-2 rounded-xl border border-black/20">
                     <span className="text-xl font-bold font-heading text-[#82917B] block">{stats.wins}</span>
-                    <span className="text-[8px] uppercase text-gray-500 font-bold block">Wins</span>
+                    <span className="text-[10px] uppercase text-gray-500 font-bold block">Wins</span>
                   </div>
                   <div className="bg-white p-2 rounded-xl border border-black/20">
                     <span className="text-xl font-bold font-heading text-black block">{stats.winRate}%</span>
-                    <span className="text-[8px] uppercase text-gray-500 font-bold block">Win Rate</span>
+                    <span className="text-[10px] uppercase text-gray-500 font-bold block">Win Rate</span>
                   </div>
                   <div className="bg-[#FFF9EC] p-2 rounded-xl border border-black/20">
                     <span className="text-xl font-bold font-heading text-[#D66A4A] block">{stats.streak}</span>
-                    <span className="text-[8px] uppercase text-gray-500 font-bold block">Streak</span>
+                    <span className="text-[10px] uppercase text-gray-500 font-bold block">Streak</span>
                   </div>
                 </div>
 
@@ -1134,7 +1146,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
                             <span
-                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded border border-black ${
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border border-black ${
                                 match.outcome === 'VICTORY'
                                   ? 'bg-[#82917B] text-white'
                                   : match.outcome === 'DEFEAT'
@@ -1192,7 +1204,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                       <IconSwords size={24} className="text-[#D66A4A]" />
                     </div>
                     <div>
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black inline-block mb-1.5">
                         Battle Ledger Clean
                       </span>
                       <h4 className="font-heading font-extrabold text-base text-black mb-1">

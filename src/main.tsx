@@ -12,7 +12,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   </React.StrictMode>
 );
 
-if ('serviceWorker' in navigator) {
+// Service worker only in production builds (in dev it would cache Vite's live modules).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err) => {
       console.error('ServiceWorker registration failed: ', err);

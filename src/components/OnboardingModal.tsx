@@ -15,7 +15,8 @@
  *      primary button advances the tour.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import {
   TypoHunterLogo,
   IconCamera,
@@ -45,6 +46,9 @@ interface Step {
 }
 
 export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClose }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   const [currentStep, setCurrentStep] = useState(0);
 
   if (!isOpen) return null;
@@ -72,7 +76,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
           {/* Dribbble-level Favicon Emblem */}
           <div className="relative z-10 group-hover:scale-105 transition-transform flex flex-col items-center">
             <TypoHunterLogo size={76} />
-            <span className="mt-2 text-[9px] font-mono font-bold uppercase tracking-widest text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black shadow-xs">
+            <span className="mt-2 text-[10px] font-mono font-bold uppercase tracking-widest text-black bg-[#E8B92D] px-2 py-0.5 rounded border border-black shadow-xs">
               Curatorial Seal #001
             </span>
           </div>
@@ -81,13 +85,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
     },
     {
       stepNumber: 2,
-      badge: "FEATURE 02 · FIELD CAPTURE & OCR",
+      badge: "FEATURE 02 · FIELD CAPTURE",
       badgeColor: "#E8B92D",
-      title: "One-Tap Camera & Offline OCR",
+      title: "One-Tap Camera",
       subtitle: "Document Linguistic Chaos in the Wild",
       description: "Whenever you spot an unintentional blunder, tap the elevated center shutter. Snap with your camera or select from your gallery.",
-      capabilityLabel: "Offline OCR & Dual Wording",
-      capabilityText: "Built-in optical character recognition extracts the text on the sign, and prompts you to record 'What it said' vs 'What they meant'.",
+      capabilityLabel: "What It Said vs. What They Meant",
+      capabilityText: "Record 'What it said' next to 'What they meant'. On browsers that support it, the app can also read the text on the sign for you.",
       targetCallout: "MAGNIFIED: CENTER BOTTOM SHUTTER",
       renderMagnifierLens: (onAdvance) => (
         <div
@@ -106,7 +110,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 +
               </div>
             </div>
-            <span className="mt-1 text-[8px] font-mono font-bold uppercase tracking-wider text-black bg-white px-1.5 py-0.2 rounded border border-black leading-none">
+            <span className="mt-1 text-[10px] font-mono font-bold uppercase tracking-wider text-black bg-white px-1.5 py-0.2 rounded border border-black leading-none">
               Shutter
             </span>
           </div>
@@ -140,7 +144,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 <IconStar key={i} size={8} filled={true} className="text-[#E8B92D]" />
               ))}
             </div>
-            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-1.5 py-0.5 rounded border border-black leading-none">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-black bg-[#E8B92D] px-1.5 py-0.5 rounded border border-black leading-none">
               Inductions
             </span>
           </div>
@@ -154,8 +158,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
       title: "Offline P2P Battles & QR Passes",
       subtitle: "Screen-to-Screen Competition Without Internet",
       description: "Ready to challenge a friend? Compare ranks and collection scores screen-to-screen with zero Wi-Fi or Bluetooth pairing.",
-      capabilityLabel: "Tamper-Proof Proof-of-Sighting",
-      capabilityText: "Generates high-density dynamic QR passes verified with SHA-256 integrity signatures to prevent forged scores in school competitions.",
+      capabilityLabel: "Fair Play Rules",
+      capabilityText: "Battles only count photos taken during the round, repeated photos earn nothing, and teachers grade by reviewing the actual photos.",
       targetCallout: "MAGNIFIED: CURATOR FIELD PASS",
       renderMagnifierLens: (onAdvance) => (
         <div
@@ -169,11 +173,11 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
           {/* Single Unified Magnified QR Pass Card with Single Shadow */}
           <div className="w-24 h-24 rounded-2xl bg-[#FFF9EC] border-3 border-black shadow-brutal flex flex-col items-center justify-center relative z-10 group-hover:scale-105 transition-transform p-2">
             <IconGrid size={30} filled={true} className="text-black mb-1" />
-            <div className="flex items-center gap-1 mb-1 text-[8px] font-mono font-bold uppercase text-[#82917B]">
+            <div className="flex items-center gap-1 mb-1 text-[10px] font-mono font-bold uppercase text-[#82917B]">
               <IconShield size={9} />
-              <span>Verified</span>
+              <span>Pass</span>
             </div>
-            <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-white bg-[#D66A4A] px-1.5 py-0.5 rounded border border-black leading-none">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-white bg-[#D66A4A] px-1.5 py-0.5 rounded border border-black leading-none">
               Optical Pass
             </span>
           </div>
@@ -202,6 +206,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
   return (
     <div
       className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs select-none"
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Welcome tour"
@@ -243,7 +248,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
         {/* Android-Style Magnified Feature Spotlight Lens Container */}
         <div className="bg-[#FFFDF9] border-2 border-black rounded-2xl p-4 mb-4 shadow-brutal-sm flex flex-col items-center justify-center relative overflow-hidden">
           {/* Target Spotlight Header Bar */}
-          <div className="w-full flex justify-between items-center text-[9px] font-mono font-bold text-gray-500 uppercase mb-2 border-b border-black/10 pb-1">
+          <div className="w-full flex justify-between items-center text-[10px] font-mono font-bold text-gray-500 uppercase mb-2 border-b border-black/10 pb-1">
             <span>Feature Discovery</span>
             <span className="text-[#D66A4A]">{step.targetCallout}</span>
           </div>

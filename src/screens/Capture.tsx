@@ -16,26 +16,36 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CATEGORIES } from '../utils/constants';
 import { compressImage } from '../utils/imageUtils';
 import { dbService, Discovery } from '../db/database';
-import { runOfflineOCR, OCRResult } from '../utils/ocrService';
+import { runOfflineOCR, OCRResult, isTextRecognitionSupported } from '../utils/ocrService';
+import { pointsLedger } from '../utils/pointsLedger';
+import { calculateSpecimenScore } from '../utils/proofOfSighting';
+import { recordCaptureActivity } from '../utils/dynamicFavicon';
 import { IconCamera, IconClose, IconRefresh, IconBolt, IconAlert, IconChevronDown, IconGraduationCap } from '../components/Icons';
 import { ClassExpedition } from '../utils/teacherService';
 
 export interface ActiveSpeedBlitzSession {
+  /** Shared by both players' devices so their result QRs can be matched. */
   battleId: string;
+  role: 'host' | 'join';
   opponentName: string;
   opponentTeam: string;
   opponentTeamTag: string;
-  opponentScore: number;
   durationMinutes: number;
+  startTime: number;
   endTime: number;
+  /** Points from fresh, non-duplicate photos taken during the round. Both players start at 0. */
   earnedScore: number;
+  specimens: number;
 }
+
+/** A photo file modified this recently counts as "just taken" (camera), not an old gallery pick. */
+const FRESH_CAPTURE_WINDOW_MS = 30 * 60 * 1000;
 
 interface CaptureProps {
   onSaveComplete: () => void;
   activeBlitz?: ActiveSpeedBlitzSession | null;
   activeClassExpedition?: ClassExpedition | null;
-  onFinishBlitz?: (earnedScore: number) => void;
+  onFinishBlitz?: () => void;
   onAddBlitzPoints?: (pts: number) => void;
 }
 
@@ -57,25 +67,22 @@ export const Capture: React.FC<CaptureProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // OCR state
-  // Active Speed Blitz Timer Hook
-  const [secondsRemaining, setSecondsRemaining] = useState(() => {
-    if (!activeBlitz) return 0;
-    return Math.max(0, Math.floor((activeBlitz.endTime - Date.now()) / 1000));
-  });
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Speed Blitz countdown (display only; App ends the round even if this screen is closed)
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    activeBlitz ? Math.max(0, Math.floor((activeBlitz.endTime - Date.now()) / 1000)) : 0
+  );
 
   useEffect(() => {
     if (!activeBlitz) return;
-    const interval = setInterval(() => {
-      const rem = Math.max(0, Math.floor((activeBlitz.endTime - Date.now()) / 1000));
-      setSecondsRemaining(rem);
-      if (rem === 0) {
-        clearInterval(interval);
-        onFinishBlitz?.(activeBlitz.earnedScore);
-      }
-    }, 1000);
+    const tick = () => setSecondsRemaining(Math.max(0, Math.floor((activeBlitz.endTime - Date.now()) / 1000)));
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [activeBlitz, onFinishBlitz]);
+  }, [activeBlitz]);
+
+  const ocrSupported = isTextRecognitionSupported();
 
   const formatTimer = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -124,10 +131,12 @@ export const Capture: React.FC<CaptureProps> = ({
       setError(null);
       setOcrResult(null);
 
-      // Trigger asynchronous on-device OCR scan
+      // On-device text recognition, only where the browser actually supports it
+      if (!ocrSupported) return;
       setOcrLoading(true);
       runOfflineOCR(file)
         .then(result => {
+          if (!result) return;
           setOcrResult(result);
           // If text was detected and title is empty, pre-fill title suggestion
           if (result.detectedText && !title) {
@@ -167,6 +176,10 @@ export const Capture: React.FC<CaptureProps> = ({
     try {
       const source = imageFile || imagePreview!;
       const result = await runOfflineOCR(source);
+      if (!result || !result.detectedText) {
+        setNotice('No text was recognised in this photo. Type the wording yourself.');
+        return;
+      }
       setOcrResult(result);
       if (result.detectedText && !originalWording) {
         setOriginalWording(result.detectedText);
@@ -179,12 +192,20 @@ export const Capture: React.FC<CaptureProps> = ({
   };
 
   // Calculate estimated points preview for students / hunters
-  const estimatedPoints = 
-    50 + // Base photo
-    (intendedWording.trim() ? 30 : 0) + // Correction analysis
-    (category !== 'Other' ? 20 : 10) + // Category
-    (location.trim() ? 10 : 0) + 
-    (notes.trim() ? 10 : 0);
+  const estimatedPoints = calculateSpecimenScore({
+    id: 'draft', discoveryNumber: 0, thumbnail: 'x', title, category, intendedWording, location, notes,
+    createdAt: '', isFavorite: false, isHallOfFame: false, rating: 0,
+  }).totalPoints;
+
+  const resetForm = () => {
+    handleRetake();
+    setTitle('');
+    setCategory(CATEGORIES[0]);
+    setOriginalWording('');
+    setIntendedWording('');
+    setLocation('');
+    setNotes('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,20 +219,26 @@ export const Capture: React.FC<CaptureProps> = ({
       return;
     }
 
+    if (!imageFile) {
+      setError('Please provide a photograph of the typo.');
+      return;
+    }
+
     setSaving(true);
     setError(null);
+    setNotice(null);
 
     try {
-      let compressed = { image: imagePreview!, thumbnail: imagePreview! };
-      if (imageFile) {
-        compressed = await compressImage(imageFile);
-      }
+      const compressed = await compressImage(imageFile);
+      const now = Date.now();
+      const capturedFresh = typeof imageFile.lastModified === 'number' && now - imageFile.lastModified < FRESH_CAPTURE_WINDOW_MS;
+      const id = 'typo_' + now + '_' + Math.random().toString(36).slice(2, 8);
+      const duplicateOf = pointsLedger.findDuplicate(compressed.hash, id);
 
       const nextNum = await dbService.getNextDiscoveryNumber();
       const newDiscovery: Discovery = {
-        id: 'typo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        id,
         discoveryNumber: nextNum,
-        image: compressed.image,
         thumbnail: compressed.thumbnail,
         title: title.trim(),
         originalWording: originalWording.trim() || undefined,
@@ -219,20 +246,41 @@ export const Capture: React.FC<CaptureProps> = ({
         category,
         location: location.trim() || undefined,
         notes: notes.trim() || undefined,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(now).toISOString(),
         isFavorite: false,
         isHallOfFame: false,
-        rating: 0
+        rating: 0,
+        capturedFresh,
+        imageHash: compressed.hash || undefined,
+        duplicateOf,
+        origin: 'own',
       };
 
-      await dbService.saveDiscovery(newDiscovery);
+      const saved = await dbService.saveDiscovery(newDiscovery, compressed.imageBlob);
+      const earned = await pointsLedger.lockDiscovery(saved);
+      recordCaptureActivity();
+
+      // Speed Blitz only counts photos taken during the round, never old gallery pictures or repeats.
+      let blitzMessage = '';
       if (activeBlitz && onAddBlitzPoints) {
-        onAddBlitzPoints(estimatedPoints);
+        if (capturedFresh && earned > 0 && now >= activeBlitz.startTime && now <= activeBlitz.endTime) {
+          onAddBlitzPoints(earned);
+        } else if (!capturedFresh) {
+          blitzMessage = ' Not counted for the blitz: only photos taken during the round count.';
+        }
       }
+
+      setSaving(false);
+      resetForm();
+      setNotice(
+        duplicateOf
+          ? `Saved #${String(nextNum).padStart(3, '0')}. This photo was already scored before, so it earns no points.${blitzMessage}`
+          : `Saved #${String(nextNum).padStart(3, '0')} · +${earned} pts locked in.${blitzMessage}`
+      );
       onSaveComplete();
     } catch (err) {
       console.error('[Capture] Error cataloging discovery:', err);
-      setError('Failed to persist discovery to local IndexedDB. Check remaining device storage.');
+      setError('Could not save this discovery. Check that your device has free storage and try again.');
       setSaving(false);
     }
   };
@@ -266,7 +314,7 @@ export const Capture: React.FC<CaptureProps> = ({
           <div className="flex justify-between items-center mb-2 flex-wrap gap-1">
             <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-[#E8B92D]">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-              Optical Connection Active
+              Speed Blitz in progress
             </span>
             <span className="text-xs font-mono font-extrabold text-[#E8B92D] bg-black/40 px-2 py-0.5 rounded border border-white/20">
               Rival: [{activeBlitz.opponentTeamTag}] {activeBlitz.opponentName}
@@ -278,33 +326,19 @@ export const Capture: React.FC<CaptureProps> = ({
               <div className="font-mono font-black text-3xl sm:text-4xl text-[#E8B92D] tracking-wider leading-none">
                 {formatTimer(secondsRemaining)}
               </div>
-              <div className="flex items-center gap-2 mt-1.5 text-[10px] font-mono flex-wrap">
+              <div className="flex items-center gap-2 mt-1.5 text-[11px] font-mono flex-wrap">
                 <span className="text-gray-300">
-                  Rival Target: <strong className="text-white font-bold">{activeBlitz.opponentScore} pts</strong>
+                  Your score: <strong className="text-[#E8B92D] font-bold">{activeBlitz.earnedScore} pts</strong> · {activeBlitz.specimens} photo{activeBlitz.specimens === 1 ? '' : 's'}
                 </span>
-                <span className="text-gray-500">·</span>
-                <span className="text-gray-300">
-                  Your Score: <strong className="text-[#E8B92D] font-bold">+{activeBlitz.earnedScore} pts</strong>
+                <span className="text-gray-400 block w-full">
+                  Only photos you take now count. Swap result QRs with your rival at the end.
                 </span>
-                {activeBlitz.earnedScore > activeBlitz.opponentScore ? (
-                  <span className="bg-[#82917B] text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                    Leading +{activeBlitz.earnedScore - activeBlitz.opponentScore}
-                  </span>
-                ) : activeBlitz.earnedScore === activeBlitz.opponentScore ? (
-                  <span className="bg-[#E8B92D] text-black text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                    Tied Score
-                  </span>
-                ) : (
-                  <span className="bg-[#D66A4A] text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                    Deficit -{activeBlitz.opponentScore - activeBlitz.earnedScore}
-                  </span>
-                )}
               </div>
             </div>
 
             <button
               type="button"
-              onClick={() => onFinishBlitz?.(activeBlitz.earnedScore)}
+              onClick={() => onFinishBlitz?.()}
               className="btn-primary py-2 px-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-sm flex-shrink-0"
             >
               Finish & Settle
@@ -338,6 +372,12 @@ export const Capture: React.FC<CaptureProps> = ({
         </div>
       )}
 
+      {notice && (
+        <div className="bg-[#EBF3E8] text-[#2D5A27] p-3.5 rounded-xl font-bold text-xs mb-5 border-2 border-black font-mono" role="status">
+          {notice}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         {/* Photo Upload Zone */}
         <div className="editorial-card p-4 rounded-2xl bg-white text-center">
@@ -348,7 +388,7 @@ export const Capture: React.FC<CaptureProps> = ({
                 {ocrLoading && (
                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white font-mono text-xs gap-2">
                     <div className="w-8 h-8 border-3 border-white border-t-[#E8B92D] rounded-full animate-spin" />
-                    <span>Scanning text (Offline OCR)...</span>
+                    <span>Reading text on the photo…</span>
                   </div>
                 )}
               </div>
@@ -361,14 +401,16 @@ export const Capture: React.FC<CaptureProps> = ({
                 >
                   <span className="flex items-center gap-1.5"><IconRefresh size={12} /> Retake / Change Photo</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleManualOCR}
-                  disabled={ocrLoading}
-                  className="btn-secondary text-xs font-bold px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5"><IconBolt size={12} /> Scan Text (OCR)</span>
-                </button>
+                {ocrSupported && (
+                  <button
+                    type="button"
+                    onClick={handleManualOCR}
+                    disabled={ocrLoading}
+                    className="btn-secondary text-xs font-bold px-3 py-2 rounded-xl uppercase tracking-wider cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5"><IconBolt size={12} /> Read Text</span>
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -388,7 +430,7 @@ export const Capture: React.FC<CaptureProps> = ({
                   Tap to Snap or Upload Photo
                 </h3>
                 <p className="text-xs text-gray-500 font-mono mt-1">
-                  Supports camera capture on mobile or image gallery files
+                  Take a photo now, or pick one from your gallery. Old gallery photos don't count in Speed Blitz or class hunts.
                 </p>
               </div>
             </div>
@@ -410,10 +452,7 @@ export const Capture: React.FC<CaptureProps> = ({
           <div className="editorial-card p-4 rounded-2xl bg-[#FFF9EC] border-2 border-black shadow-brutal-sm space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider bg-black text-[#E8B92D] px-2 py-0.5 rounded">
-                <span className="flex items-center gap-1"><IconBolt size={10} /> OCR Text Extracted</span>
-              </span>
-              <span className="text-[10px] font-mono text-gray-600 font-bold">
-                {ocrResult.confidence}% Optical Confidence
+                <span className="flex items-center gap-1"><IconBolt size={10} /> Text found on photo</span>
               </span>
             </div>
 
@@ -421,11 +460,7 @@ export const Capture: React.FC<CaptureProps> = ({
               <div className="bg-white p-2.5 rounded-xl border border-black/15 font-mono text-xs text-black italic">
                 "{ocrResult.detectedText}"
               </div>
-            ) : (
-              <p className="text-xs font-mono text-gray-500 italic">
-                Optical contrast detected on sign. Type the text below to verify.
-              </p>
-            )}
+            ) : null}
 
             {ocrResult.detectedMistakeHint && (
               <div className="text-[11px] font-mono font-bold text-[#D66A4A] bg-[#fdf6f4] p-2 rounded-lg border border-[#D66A4A]/30 flex items-center gap-1.5">
@@ -573,7 +608,7 @@ export const Capture: React.FC<CaptureProps> = ({
             disabled={saving}
             className="w-full btn-primary py-4 rounded-xl text-sm font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal disabled:opacity-50"
           >
-            {saving ? 'Cataloging & Compressing Specimen...' : `Archive Specimen (+${estimatedPoints} pts)`}
+            {saving ? 'Saving…' : `Archive Specimen (+${estimatedPoints} pts)`}
           </button>
         </div>
       </form>

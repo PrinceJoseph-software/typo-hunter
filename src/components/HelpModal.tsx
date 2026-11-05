@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { IconClose, IconRefresh } from './Icons';
 
 interface HelpModalProps {
@@ -9,11 +10,15 @@ interface HelpModalProps {
 }
 
 export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayTour, onOpenPrivacy }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div 
       className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs" 
+      ref={dialogRef}
       role="dialog" 
       aria-modal="true" 
       aria-label="Field Guide"

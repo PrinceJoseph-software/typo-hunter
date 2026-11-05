@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { Discovery } from '../db/database';
+import { FullImage } from '../components/FullImage';
 import { IconStar, IconTrophy, IconRefresh, IconAward, IconCamera, IconGrid } from '../components/Icons';
 
 interface HallOfFameProps {
@@ -112,10 +113,10 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({
             aria-label={`View ${displayFeatured.title}`}
           >
             <div className="h-64 sm:h-72 bg-[#1C1A17] relative flex items-center justify-center overflow-hidden">
-              <img 
-                src={displayFeatured.image} 
-                alt={displayFeatured.title} 
-                className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-200" 
+              <FullImage
+                discovery={displayFeatured}
+                alt={displayFeatured.title}
+                className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-200"
               />
               <span className="absolute top-3 left-3 bg-[#E8B92D] text-black text-xs font-bold px-2.5 py-1 rounded border-2 border-black uppercase tracking-wider shadow-brutal-sm">
                 {displayFeatured.category}
@@ -153,7 +154,7 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({
           <div className="w-16 h-16 bg-[#F4EBDD] border-2 border-black rounded-full flex items-center justify-center mx-auto mb-4 shadow-brutal-sm">
             <IconTrophy size={28} className="text-[#D66A4A]" />
           </div>
-          <div className="inline-block bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
+          <div className="inline-block bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
             Curatorial Exhibition Status: Empty
           </div>
           <h3 className="font-heading font-extrabold text-xl text-black mb-1">
@@ -224,15 +225,15 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({
               >
                 <div>
                   <div className="h-28 bg-[#1C1A17] rounded-lg border border-black overflow-hidden mb-2 relative">
-                    <img src={item.thumbnail || item.image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                    <span className="absolute bottom-1 left-1 bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1 rounded">
+                    <img src={item.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <span className="absolute bottom-1 left-1 bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-1 rounded">
                       #{item.discoveryNumber}
                     </span>
                   </div>
                   <h4 className="font-heading font-extrabold text-xs sm:text-sm truncate text-black group-hover:text-[#D66A4A]">
                     {item.title}
                   </h4>
-                  <span className="text-[9px] font-mono text-gray-500 uppercase block mb-1 truncate">
+                  <span className="text-[10px] font-mono text-gray-500 uppercase block mb-1 truncate">
                     {item.category}
                   </span>
                 </div>

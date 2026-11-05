@@ -7,6 +7,8 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { IconAlert, IconRefresh, IconDownload } from './Icons';
 import { dbService } from '../db/database';
+import { createArchiveExportBlob, downloadBlob } from '../utils/archiveSecurity';
+import { pointsLedger } from '../utils/pointsLedger';
 
 interface Props {
   children: ReactNode;
@@ -59,13 +61,10 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ exporting: true });
     try {
       const records = await dbService.getAllDiscoveries();
-      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(records, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute('href', dataStr);
-      downloadAnchor.setAttribute('download', `typo_hunter_emergency_backup_${Date.now()}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+      if (!pointsLedger.isLoaded()) await pointsLedger.load();
+      const nickname = localStorage.getItem('typo_hunter_nickname') || 'Hunter';
+      const blob = await createArchiveExportBlob(records, nickname);
+      downloadBlob(blob, `typo-hunter-emergency-backup-${Date.now()}.json`);
     } catch (err) {
       alert('Failed to extract emergency backup: ' + (err as Error).message);
     } finally {
@@ -98,7 +97,7 @@ export class ErrorBoundary extends Component<Props, State> {
             {/* Diagnostic Box */}
             {this.state.error && (
               <div className="bg-[#282722] text-[#E8B92D] p-3 rounded-xl border border-black text-left font-mono text-[10px] mb-5 overflow-x-auto max-h-32">
-                <div className="font-bold text-white mb-1 uppercase text-[9px] tracking-wider">
+                <div className="font-bold text-white mb-1 uppercase text-[10px] tracking-wider">
                   Engine Fault Trace:
                 </div>
                 <div className="text-red-300 font-bold mb-1">{this.state.error.toString()}</div>

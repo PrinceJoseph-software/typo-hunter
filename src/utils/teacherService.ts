@@ -14,7 +14,8 @@
  */
 
 import { Discovery } from '../db/database';
-import { calculateTotalCuratorPoints } from './proofOfSighting';
+import { calculateSpecimenScore, sumSpecimenPoints } from './proofOfSighting';
+import { getDeviceId } from './identity';
 import { pvpService, SquadMember, SquadTeam, SquadBattleResult } from './pvpService';
 
 export interface ClassExpedition {
@@ -59,8 +60,43 @@ export interface StudentSubmission {
   source?: 'qr_submission' | 'qr_pass' | 'archive';
   /** False when the student submitted for a different class than the one being hosted. */
   classMatch?: boolean;
-  /** Specimen titles (available when the student shares a full signed archive). */
+  /** Specimen titles (legacy; replaced by `evidence`). */
   specimenTitles?: string[];
+  /** Random install id of the student's device. Rows are keyed on it so equal names never collide. */
+  deviceId?: string;
+  /** 'reviewed' = points come from photos the teacher approved; otherwise a self-reported number. */
+  reviewStatus?: 'self_reported' | 'reviewed';
+  /** Photos from the student's class review file, each approved or rejected by the teacher. */
+  evidence?: EvidenceItem[];
+}
+
+export interface EvidenceItem {
+  id: string;
+  title: string;
+  originalWording?: string;
+  intendedWording?: string;
+  category: string;
+  createdAt: string;
+  thumbnail: string;
+  points: number;
+  capturedFresh: boolean;
+  /** null = not reviewed yet */
+  approved: boolean | null;
+  /** Why it was auto-flagged (outside class time, old gallery photo, …). */
+  flag?: string;
+}
+
+/** File a student hands to the teacher: the photos taken during the class, for review. */
+export interface ClassReviewFile {
+  app: 'TYPO_HUNTER_CLASS_REVIEW';
+  formatVersion: 1;
+  classId: string;
+  className: string;
+  deviceId: string;
+  studentName: string;
+  squadFaction: string;
+  createdAt: string;
+  entries: Array<Omit<EvidenceItem, 'approved' | 'flag'>>;
 }
 
 export interface ClassSquadAssignments {
@@ -72,6 +108,7 @@ export interface StudentSubmissionPayload {
   app: 'TYPO_HUNTER_SUBMISSION';
   action: 'SUBMIT_ASSIGNMENT';
   classId?: string;
+  deviceId?: string;
   studentName: string;
   squadFaction: string;
   points: number;
@@ -169,6 +206,7 @@ export const teacherService = {
       legends: number;
       checksum?: string;
       classId?: string;
+      deviceId?: string;
       kind: 'qr_submission' | 'qr_pass';
     },
     hostedClass: ClassExpedition | null
@@ -179,6 +217,7 @@ export const teacherService = {
       scan.kind === 'qr_submission'
         ? `SUBMIT-${scan.points}-${scan.specimens}-`
         : `TPH-${scan.points}-`;
+    // Format check only: a QR code can't prove its numbers. Teachers should review photos instead.
     const tamperVerified = !!scan.checksum && scan.checksum.startsWith(expectedPrefix);
     const classMatch = !hostedClass || !scan.classId || scan.classId === hostedClass.classId;
 
@@ -197,7 +236,131 @@ export const teacherService = {
       submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       source: scan.kind,
       classMatch,
+      deviceId: typeof scan.deviceId === 'string' ? scan.deviceId.slice(0, 32) : undefined,
+      reviewStatus: 'self_reported',
     };
+  },
+
+  /** Start and end (ms) of a class hunt. Only photos taken in this window count. */
+  getClassWindow(expedition: ClassExpedition): { start: number; end: number } {
+    const start = Date.parse(expedition.timestamp) || Date.now();
+    return { start, end: start + Math.max(1, expedition.durationMinutes) * 60 * 1000 };
+  },
+
+  /** Small allowance either side for clock differences between phones (they're normally synced to seconds). */
+  CLOCK_GRACE_MS: 2 * 60 * 1000,
+
+  /** The student's own, point-earning, freshly taken photos from inside the class window. */
+  selectSessionEntries(discoveries: Discovery[], expedition: ClassExpedition): Discovery[] {
+    const { start, end } = this.getClassWindow(expedition);
+    return discoveries.filter(d => {
+      const t = Date.parse(d.createdAt);
+      return (
+        d.origin !== 'imported' &&
+        d.capturedFresh === true &&
+        calculateSpecimenScore(d).eligible &&
+        t >= start - this.CLOCK_GRACE_MS &&
+        t <= end + this.CLOCK_GRACE_MS
+      );
+    });
+  },
+
+  createClassReviewFile(
+    studentName: string,
+    squadFaction: string,
+    discoveries: Discovery[],
+    expedition: ClassExpedition
+  ): ClassReviewFile {
+    const entries = this.selectSessionEntries(discoveries, expedition).map(d => ({
+      id: d.id,
+      title: d.title,
+      originalWording: d.originalWording,
+      intendedWording: d.intendedWording,
+      category: d.category,
+      createdAt: d.createdAt,
+      thumbnail: d.thumbnail,
+      points: calculateSpecimenScore(d).totalPoints,
+      capturedFresh: d.capturedFresh === true,
+    }));
+    return {
+      app: 'TYPO_HUNTER_CLASS_REVIEW',
+      formatVersion: 1,
+      classId: expedition.classId,
+      className: expedition.className,
+      deviceId: getDeviceId(),
+      studentName: studentName.trim() || 'Student',
+      squadFaction,
+      createdAt: new Date().toISOString(),
+      entries,
+    };
+  },
+
+  parseClassReviewFile(text: string): ClassReviewFile | null {
+    try {
+      const f = JSON.parse(text);
+      if (
+        f && f.app === 'TYPO_HUNTER_CLASS_REVIEW' && typeof f.studentName === 'string' &&
+        typeof f.deviceId === 'string' && Array.isArray(f.entries)
+      ) {
+        f.entries = f.entries
+          .filter((e: Record<string, unknown>) => e && typeof e.title === 'string' && typeof e.thumbnail === 'string' && String(e.thumbnail).startsWith('data:image/'))
+          .slice(0, 200);
+        return f as ClassReviewFile;
+      }
+    } catch {
+      // not JSON
+    }
+    return null;
+  },
+
+  /**
+   * Turns a review file into a roster row. Each photo starts unreviewed, except
+   * photos outside the class time or not freshly taken, which start rejected
+   * with a reason the teacher can override.
+   */
+  submissionFromReviewFile(file: ClassReviewFile, hostedClass: ClassExpedition | null): StudentSubmission {
+    const window = hostedClass ? this.getClassWindow(hostedClass) : null;
+    const evidence: EvidenceItem[] = file.entries.map(e => {
+      const t = Date.parse(e.createdAt);
+      let flag: string | undefined;
+      if (window && (t < window.start - this.CLOCK_GRACE_MS || t > window.end + this.CLOCK_GRACE_MS)) flag = 'Taken outside class time';
+      else if (!e.capturedFresh) flag = 'Old photo from the gallery';
+      return {
+        ...e,
+        points: Math.max(0, Math.min(120, Number(e.points) || 0)),
+        approved: flag ? false : null,
+        flag,
+      };
+    });
+    const sub: StudentSubmission = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      studentName: file.studentName.trim().slice(0, 40) || 'Student',
+      squadFaction: String(file.squadFaction || 'SYN').slice(0, 6),
+      classId: file.classId || hostedClass?.classId || 'INDEPENDENT',
+      points: 0,
+      specimensCataloged: evidence.length,
+      legendsEnshrined: 0,
+      grade: '',
+      status: 'PENDING',
+      tamperVerified: true,
+      antiCheatHash: 'REVIEW-FILE',
+      submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      source: 'archive',
+      classMatch: !hostedClass || file.classId === hostedClass.classId,
+      deviceId: file.deviceId.slice(0, 32),
+      reviewStatus: 'reviewed',
+      evidence,
+    };
+    return this.recomputeReviewedScore(sub, hostedClass?.targetPoints || 250);
+  },
+
+  /** Points for a reviewed student = sum of approved photos. */
+  recomputeReviewedScore(sub: StudentSubmission, targetPoints: number): StudentSubmission {
+    if (sub.reviewStatus !== 'reviewed' || !sub.evidence) return sub;
+    const approved = sub.evidence.filter(e => e.approved === true);
+    const points = approved.reduce((sum, e) => sum + e.points, 0) + (sub.teacherCommendation ? 50 : 0);
+    const { grade, status } = this.calculateGrade(points, targetPoints);
+    return { ...sub, points, specimensCataloged: approved.length, grade, status };
   },
 
   getClassSquads(): ClassSquadAssignments {
@@ -233,6 +396,7 @@ export const teacherService = {
       specimens: student.specimensCataloged,
       legends: student.legendsEnshrined,
       passFingerprint: pvpService.passFingerprint(student.studentName, student.antiCheatHash),
+      deviceId: student.deviceId,
       verified: this.isSquadEligible(student),
     });
   },
@@ -278,18 +442,31 @@ export const teacherService = {
     }
   },
 
-  saveStudentToGradebook(submission: StudentSubmission): void {
+  /**
+   * Adds or updates a roster row. Rows match on device id (names are not unique);
+   * rows without a device id (older app versions) never merge with anyone.
+   * A row whose photos were reviewed is never overwritten by a self-reported QR.
+   */
+  saveStudentToGradebook(submission: StudentSubmission): { replaced: boolean; keptReview: boolean } {
     const list = this.getClassGradebook();
-    const existingIndex = list.findIndex(
-      s => s.studentName.toLowerCase() === submission.studentName.toLowerCase()
-    );
+    const existingIndex = submission.deviceId
+      ? list.findIndex(s => s.deviceId === submission.deviceId)
+      : list.findIndex(s => s.id === submission.id);
     if (existingIndex >= 0) {
+      const existing = list[existingIndex];
+      if (existing.reviewStatus === 'reviewed' && submission.reviewStatus !== 'reviewed') {
+        list[existingIndex] = { ...existing, studentName: submission.studentName, squadFaction: submission.squadFaction };
+        localStorage.setItem(STORAGE_GRADEBOOK, JSON.stringify(list));
+        return { replaced: true, keptReview: true };
+      }
       // Keep the original id so the student's class-squad assignment survives a re-scan.
-      list[existingIndex] = { ...submission, id: list[existingIndex].id };
-    } else {
-      list.unshift(submission);
+      list[existingIndex] = { ...submission, id: existing.id };
+      localStorage.setItem(STORAGE_GRADEBOOK, JSON.stringify(list));
+      return { replaced: true, keptReview: false };
     }
+    list.unshift(submission);
     localStorage.setItem(STORAGE_GRADEBOOK, JSON.stringify(list));
+    return { replaced: false, keptReview: false };
   },
 
   removeStudentFromGradebook(id: string): void {
@@ -343,64 +520,36 @@ export const teacherService = {
     };
   },
 
+  /**
+   * Quick QR summary for the teacher. Inside a class it counts only photos taken
+   * during the class; it is still self-reported (the review file is the evidence).
+   */
   createStudentSubmissionPayload(
     studentName: string,
     squadFaction: string,
     discoveries: Discovery[],
-    classId?: string
+    joinedClass: ClassExpedition | null,
+    lifetimePoints: number
   ): StudentSubmissionPayload {
-    const points = calculateTotalCuratorPoints(discoveries);
-    const specimens = discoveries.length;
-    const legends = discoveries.filter(d => d.isHallOfFame).length;
+    const entries = joinedClass ? this.selectSessionEntries(discoveries, joinedClass) : discoveries.filter(d => d.origin !== 'imported');
+    const points = joinedClass ? sumSpecimenPoints(entries) : lifetimePoints;
+    const specimens = entries.length;
     const timestamp = new Date().toISOString();
     const checksum = `SUBMIT-${points}-${specimens}-${Date.now().toString(36).toUpperCase()}`;
 
     return {
       app: 'TYPO_HUNTER_SUBMISSION',
       action: 'SUBMIT_ASSIGNMENT',
-      classId,
+      classId: joinedClass?.classId,
+      deviceId: getDeviceId(),
       studentName: studentName.trim() || 'Student',
       squadFaction: squadFaction || 'SYN',
       points,
       specimens,
-      legends,
+      legends: 0,
       checksum,
       timestamp,
     };
-  },
-
-  parseClassPayload(rawString: string): ClassExpeditionPayload | null {
-    try {
-      const parsed = JSON.parse(rawString);
-      if (
-        parsed &&
-        parsed.app === 'TYPO_HUNTER_CLASS' &&
-        parsed.action === 'JOIN_CLASS_EXPEDITION' &&
-        typeof parsed.className === 'string'
-      ) {
-        return parsed as ClassExpeditionPayload;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  },
-
-  parseStudentSubmission(rawString: string): StudentSubmissionPayload | null {
-    try {
-      const parsed = JSON.parse(rawString);
-      if (
-        parsed &&
-        parsed.app === 'TYPO_HUNTER_SUBMISSION' &&
-        parsed.action === 'SUBMIT_ASSIGNMENT' &&
-        typeof parsed.studentName === 'string'
-      ) {
-        return parsed as StudentSubmissionPayload;
-      }
-      return null;
-    } catch {
-      return null;
-    }
   },
 
   exportGradebookCsv(submissions: StudentSubmission[], className: string): void {
@@ -412,7 +561,7 @@ export const teacherService = {
       'Legends Enshrined',
       'Assigned Grade',
       'Status',
-      'Tamper Hash',
+      'Evidence',
       'Submission Timestamp',
       'Teacher Notes',
     ];
@@ -425,7 +574,7 @@ export const teacherService = {
       s.legendsEnshrined,
       `"${s.grade}"`,
       `"${s.status}"`,
-      `"${s.antiCheatHash}"`,
+      `"${s.reviewStatus === 'reviewed' ? `Photos reviewed (${(s.evidence || []).filter(e => e.approved).length} approved)` : 'Self-reported'}"`,
       `"${s.submittedAt}"`,
       `"${(s.teacherCommendation || '').replace(/"/g, '""')}"`,
     ]);

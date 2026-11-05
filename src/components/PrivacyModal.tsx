@@ -3,7 +3,8 @@
  * @description Editorial Privacy Policy, Zero-Cookie Disclosure, and Local Data Rights modal.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { IconClose } from './Icons';
 
 interface PrivacyModalProps {
@@ -12,11 +13,15 @@ interface PrivacyModalProps {
 }
 
 export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
     <div 
       className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs" 
+      ref={dialogRef}
       role="dialog" 
       aria-modal="true" 
       aria-label="Privacy Policy & Cookies Disclosure"
@@ -46,7 +51,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
           {/* Section 1: Zero Cookies */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#82917B] text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+              <span className="bg-[#82917B] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
                 Zero Trackers
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
@@ -62,7 +67,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
           {/* Section 2: Local Storage Only */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#E8B92D] text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase border border-black">
+              <span className="bg-[#E8B92D] text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-black">
                 100% Offline
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
@@ -78,7 +83,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
           {/* Section 3: Hardware & Camera Permissions */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#D66A4A] text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+              <span className="bg-[#D66A4A] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
                 Hardware
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
@@ -93,7 +98,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
           {/* Section 4: Peer-to-Peer QR Transmission */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-black text-[#E8B92D] text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+              <span className="bg-black text-[#E8B92D] text-[10px] font-bold px-2 py-0.5 rounded uppercase">
                 Optical P2P
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
@@ -111,14 +116,14 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
               5. Total Data Ownership & Export
             </h3>
             <p className="text-gray-700">
-              You own all intellectual property documented in your personal museum. You can export your full museum archive as a cryptographically signed JSON file at any time from the Curator Profile, or wipe all records with a single click.
+              You own all intellectual property documented in your personal museum. You can export your full museum as a backup file at any time from the Curator Profile. Clearing this site's data in your browser deletes everything, so keep a backup.
             </p>
           </div>
 
           {/* Section 6: Notification & Inactivity Favicon Privacy */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#E8B92D] text-black text-[9px] font-bold px-2 py-0.5 rounded uppercase border border-black">
+              <span className="bg-[#E8B92D] text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-black">
                 Local Push Only
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
@@ -126,22 +131,22 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
               </h3>
             </div>
             <p className="text-gray-700">
-              Browser alerts and Duolingo-style mascot dispatches are generated <strong>100% on-device</strong> using the browser's native Web Notifications API and Service Worker. Typo Hunter does not register device push tokens (FCM, APNs, or WebPush relays) with any third-party server. Inactivity timestamps and mascot favicon states reside strictly inside your local browser storage.
+              Browser alerts and mascot dispatches are generated <strong>100% on-device</strong> using the browser's native Web Notifications API and Service Worker. Typo Hunter does not register device push tokens (FCM, APNs, or WebPush relays) with any server. On supported browsers (installed app, Chromium) reminders arrive through Periodic Background Sync, which the browser schedules; elsewhere they only appear inside the app. Inactivity timestamps and mascot states stay in your local browser storage.
             </p>
           </div>
 
-          {/* Section 7: Anti-Cheat Cryptographic Privacy */}
+          {/* Section 7: Honest limits of checksums */}
           <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#82917B] text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase">
-                Web Crypto
+              <span className="bg-[#82917B] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
+                Honest Limits
               </span>
               <h3 className="font-heading font-extrabold text-sm text-black">
-                7. Client-Side Cryptographic Signatures
+                7. Checksums Are Not Security
               </h3>
             </div>
             <p className="text-gray-700">
-              All SHA-256 archive integrity signatures and FNV-1a perceptual Proof-of-Sighting hashes are computed locally via the hardware-accelerated Web Crypto API (<code className="font-bold">crypto.subtle</code>). Zero cryptographic private keys, passphrases, or archive payloads are ever transmitted over the internet.
+              Backup files include a SHA-256 checksum that catches accidental damage. It is not a security signature: a determined person can edit a file and fix the checksum. QR passes and scores work on the honour system. Teachers should grade by reviewing the photos students hand in, which the class review file makes possible. A random device ID is created on this device so classmates with the same name don't overwrite each other; it is only shared inside QR codes and files you choose to share.
             </p>
           </div>
         </div>

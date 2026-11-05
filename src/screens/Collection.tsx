@@ -204,12 +204,12 @@ export const Collection: React.FC<CollectionProps> = ({
                 <div>
                   <div className="h-36 sm:h-44 bg-[#1C1A17] relative overflow-hidden flex items-center justify-center">
                     <img 
-                      src={item.thumbnail || item.image} 
+                      src={item.thumbnail} 
                       alt={item.title} 
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" 
                     />
                     <div className="absolute top-2 left-2 flex gap-1 items-center">
-                      <span className="bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded">
+                      <span className="bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-1.5 py-0.5 rounded">
                         #{String(item.discoveryNumber).padStart(3, '0')}
                       </span>
                       {item.isFavorite && (
@@ -225,7 +225,7 @@ export const Collection: React.FC<CollectionProps> = ({
                     )}
                   </div>
                   <div className="p-3">
-                    <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-wider block mb-0.5 truncate">
+                    <span className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-wider block mb-0.5 truncate">
                       {item.category}
                     </span>
                     <h3 className="font-heading font-extrabold text-sm sm:text-base text-black mb-1 line-clamp-2 leading-snug group-hover:text-[#D66A4A] transition-colors">
@@ -259,11 +259,11 @@ export const Collection: React.FC<CollectionProps> = ({
                 aria-label={`${item.title}, ${item.category}`}
               >
                 <div className="w-16 h-16 bg-[#1C1A17] rounded-lg border-2 border-black overflow-hidden flex-shrink-0">
-                  <img src={item.thumbnail || item.image} alt="" className="w-full h-full object-cover" />
+                  <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div className="overflow-hidden min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-1.5 py-0.2 rounded">
+                    <span className="bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-1.5 py-0.2 rounded">
                       #{String(item.discoveryNumber).padStart(3, '0')}
                     </span>
                     <span className="text-[10px] font-mono font-bold text-gray-500 uppercase truncate">
@@ -304,7 +304,7 @@ export const Collection: React.FC<CollectionProps> = ({
               <IconCamera size={26} className="text-[#D66A4A]" />
             )}
           </div>
-          <div className="inline-block bg-black text-[#E8B92D] text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
+          <div className="inline-block bg-black text-[#E8B92D] text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2">
             {hasActiveFilter ? 'Filter Predicate Zero Matches' : 'Archive Repository Status: Empty'}
           </div>
           <h3 className="font-heading font-extrabold text-xl text-black mb-1">

@@ -11,12 +11,15 @@
  *   - Native Share Integration: Bridges to `generateShareCardBlob` with Web Share API and JPEG download fallback.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { Discovery, dbService } from '../db/database';
 import { CATEGORIES } from '../utils/constants';
 import { generateShareCardBlob } from '../utils/shareCard';
 import { generateProofOfSighting } from '../utils/proofOfSighting';
-import { IconHeart, IconTrophy, IconStar, IconArrowLeft, IconCheck, IconChevronDown } from '../components/Icons';
+import { pointsLedger } from '../utils/pointsLedger';
+import { useDiscoveryImage } from '../hooks/useDiscoveryImage';
+import { IconHeart, IconTrophy, IconStar, IconArrowLeft, IconChevronDown } from '../components/Icons';
 
 interface DetailProps {
   discovery: Discovery;
@@ -37,24 +40,40 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const proof = generateProofOfSighting(discovery);
+  const lockedPoints = pointsLedger.getEntry(discovery.id)?.points ?? 0;
+  const fullImage = useDiscoveryImage(discovery.id, discovery.thumbnail);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  const deleteDialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(editDialogRef, isEditing, () => setIsEditing(false));
+  useDialogA11y(deleteDialogRef, showDeleteConfirm, () => setShowDeleteConfirm(false));
+
+  // Every mutation reports failure instead of failing silently.
+  const persist = async (updated: Discovery): Promise<boolean> => {
+    try {
+      const saved = await dbService.saveDiscovery(updated);
+      await pointsLedger.lockDiscovery(saved);
+      setActionError(null);
+      onUpdate();
+      return true;
+    } catch (err) {
+      console.error('[Detail] Save failed', err);
+      setActionError('Could not save that change. Check your device storage and try again.');
+      return false;
+    }
+  };
 
   const toggleFavorite = async () => {
-    const updated = { ...discovery, isFavorite: !discovery.isFavorite };
-    await dbService.saveDiscovery(updated);
-    onUpdate();
+    await persist({ ...discovery, isFavorite: !discovery.isFavorite });
   };
 
   const toggleHallOfFame = async () => {
-    const updated = { ...discovery, isHallOfFame: !discovery.isHallOfFame };
-    await dbService.saveDiscovery(updated);
-    onUpdate();
+    await persist({ ...discovery, isHallOfFame: !discovery.isHallOfFame });
   };
 
   const handleRating = async (rating: number) => {
     const newRating = rating === discovery.rating ? 0 : rating;
-    const updated = { ...discovery, rating: newRating };
-    await dbService.saveDiscovery(updated);
-    onUpdate();
+    await persist({ ...discovery, rating: newRating });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -68,9 +87,11 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
       location: location.trim() || undefined,
       notes: notes.trim() || undefined,
     };
-    await dbService.saveDiscovery(updated);
-    setIsEditing(false);
-    onUpdate();
+    if (!updated.title) {
+      setActionError('A title is required.');
+      return;
+    }
+    if (await persist(updated)) setIsEditing(false);
   };
 
   const handleShareCard = async () => {
@@ -126,7 +147,7 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
         {/* Specimen Photograph */}
         <div className="relative bg-[#1C1A17] flex items-center justify-center border-b-2 border-black max-h-[460px] overflow-hidden">
           <img 
-            src={discovery.image} 
+ src={fullImage} 
             alt={discovery.title} 
             className="w-full h-auto max-h-[460px] object-contain" 
           />
@@ -250,41 +271,44 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
             </div>
           </dl>
 
-          {/* Proof-of-Sighting & Classroom Score Dossier */}
+          {/* Points for this entry */}
           <div className="bg-[#FFF9EC] p-3.5 rounded-xl border-2 border-black shadow-brutal-sm space-y-2 font-mono">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-[#E8B92D] px-2 py-0.5 rounded">
-                Proof of Sighting
+                Points
               </span>
               <span className="text-xs font-bold font-heading text-black">
-                +{proof.score.totalPoints} pts
+                {lockedPoints} pts locked
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 text-[9px] pt-1">
-              <span className="bg-white px-2 py-0.5 rounded border border-black/20">Photo +50</span>
-              {proof.score.correctionBonus > 0 && (
-                <span className="bg-white px-2 py-0.5 rounded border border-black/20 text-[#82917B] font-bold">Correction +30</span>
-              )}
-              {proof.score.categorizationBonus > 0 && (
+            {proof.score.eligible ? (
+              <div className="flex flex-wrap gap-1.5 text-[10px] pt-1">
+                <span className="bg-white px-2 py-0.5 rounded border border-black/20">Photo +{proof.score.basePoints}</span>
+                {proof.score.correctionBonus > 0 && (
+                  <span className="bg-white px-2 py-0.5 rounded border border-black/20 text-[#82917B] font-bold">Correction +30</span>
+                )}
                 <span className="bg-white px-2 py-0.5 rounded border border-black/20">Category +{proof.score.categorizationBonus}</span>
-              )}
-              {proof.score.fieldNotesBonus > 0 && (
-                <span className="bg-white px-2 py-0.5 rounded border border-black/20">Context +{proof.score.fieldNotesBonus}</span>
-              )}
-              {proof.score.ratingBonus > 0 && (
-                <span className="bg-white px-2 py-0.5 rounded border border-black/20 text-[#D66A4A] font-bold">Stars +{proof.score.ratingBonus}</span>
-              )}
-              {proof.score.hallOfFameBonus > 0 && (
-                <span className="bg-[#E8B92D] px-2 py-0.5 rounded border border-black text-black font-bold">Legend +100</span>
-              )}
-            </div>
+                {proof.score.fieldNotesBonus > 0 && (
+                  <span className="bg-white px-2 py-0.5 rounded border border-black/20">Context +{proof.score.fieldNotesBonus}</span>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-700">No points: {proof.score.ineligibleReason?.toLowerCase()}.</p>
+            )}
 
-            <div className="text-[10px] text-gray-600 pt-1 border-t border-black/10 flex justify-between items-center">
-              <span className="text-gray-500">Hash: <code className="text-black font-bold">{proof.verificationHash}</code></span>
-              <span className="text-[#82917B] font-bold flex items-center gap-1"><IconCheck size={12} /> Optical Validated</span>
-            </div>
+            <p className="text-[10px] text-gray-600 pt-1 border-t border-black/10">
+              Stars and Legends are your personal picks and don't add points. Points stay locked even if you delete this photo.
+              {discovery.sourceHunter && ` Imported from ${discovery.sourceHunter}.`}
+            </p>
+            <p className="text-[10px] text-gray-400">Record ID: <code>{proof.verificationHash}</code></p>
           </div>
+
+          {actionError && (
+            <div className="bg-[#D66A4A] text-white p-2.5 rounded-xl text-xs font-bold font-mono border-2 border-black" role="alert">
+              {actionError}
+            </div>
+          )}
 
           {/* Action Bar */}
           <div className="pt-4 flex flex-col sm:flex-row gap-2.5">
@@ -315,7 +339,7 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
 
       {/* Edit Modal */}
       {isEditing && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Edit specimen">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" ref={editDialogRef} role="dialog" aria-modal="true" aria-label="Edit specimen">
           <div className="editorial-card bg-white p-5 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-extrabold font-heading mb-4">Edit Specimen Dossier</h2>
             <form onSubmit={handleSaveEdit} className="space-y-3.5">
@@ -370,7 +394,7 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Confirm delete">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" ref={deleteDialogRef} role="dialog" aria-modal="true" aria-label="Confirm delete">
           <div className="editorial-card bg-white p-6 rounded-2xl max-w-sm w-full text-center">
             <h3 className="font-heading font-extrabold text-xl mb-2 text-black">Remove Specimen?</h3>
             <p className="text-xs text-gray-600 mb-6 leading-relaxed">
@@ -378,7 +402,16 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
             </p>
             <div className="flex gap-2.5">
               <button
-                onClick={async () => { await dbService.deleteDiscovery(discovery.id); onDelete(); }}
+                onClick={async () => {
+                  try {
+                    await dbService.deleteDiscovery(discovery.id);
+                    onDelete();
+                  } catch (err) {
+                    console.error('[Detail] Delete failed', err);
+                    setShowDeleteConfirm(false);
+                    setActionError('Could not delete this entry. Please try again.');
+                  }
+                }}
                 className="flex-1 btn-danger py-2.5 rounded-xl text-xs font-extrabold uppercase"
               >
                 Delete
