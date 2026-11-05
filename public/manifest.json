@@ -1,15 +1,20 @@
 {
   "id": "/",
   "short_name": "Typo Hunter",
-  "name": "Typo Hunter — Visual Typo Museum",
-  "description": "Document and archive typographical errors found in the wild.",
+  "name": "Typo Hunter: collect the typos you spot in the wild",
+  "description": "Photograph and collect funny typos, mistranslations and signage mistakes. Battle friends by QR code or run a class typo hunt. Free, offline, private.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F4EBDD",
   "theme_color": "#282722",
-  "categories": ["photography", "entertainment", "lifestyle"],
+  "categories": [
+    "education",
+    "photography",
+    "games",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "/favicon.svg",
@@ -35,5 +40,7 @@
       "sizes": "512x512",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "lang": "en",
+  "dir": "ltr"
 }

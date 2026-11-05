@@ -13,6 +13,8 @@
  *   changed by a web app; the tab/window icon and in-app banner reflect the stage.
  */
 
+import { dbService } from '../db/database';
+
 export type FaviconStage = 'pristine' | 'pleading' | 'melting';
 
 export const FAVICON_SVGS: Record<FaviconStage, string> = {
@@ -169,9 +171,7 @@ export function setBrowserFavicon(stage: FaviconStage): void {
 
 /** Mirrors the last-capture time into IndexedDB so the service worker can read it for reminders. */
 function mirrorToServiceWorkerStore(ts: number): void {
-  import('../db/database')
-    .then(({ dbService }) => dbService.setMeta('lastCaptureAt', ts))
-    .catch(() => {});
+  dbService.setMeta('lastCaptureAt', ts).catch(() => {});
 }
 
 /**

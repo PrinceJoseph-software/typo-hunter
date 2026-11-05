@@ -16,6 +16,7 @@
 export type NotificationTone = 'playful' | 'stern' | 'safari';
 
 import { ROTATING_PROMPTS } from './constants';
+import { dbService } from '../db/database';
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -133,7 +134,6 @@ export async function syncReminderSchedule(): Promise<void> {
   if (typeof window === 'undefined') return;
   const settings = getNotificationSettings();
   try {
-    const { dbService } = await import('../db/database');
     await dbService.setMeta('notificationSettings', settings);
     // The worker can't import app code, so hand it the texts for the chosen tone.
     await dbService.setMeta('reminderMessages', {

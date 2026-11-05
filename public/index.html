@@ -3,19 +3,116 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Typo Hunter — Document and archive typographical errors found in the wild." />
+
+    <!-- Primary -->
+    <title>Typo Hunter: collect the typos you spot in the wild</title>
+    <meta
+      name="description"
+      content="Typo Hunter is a free, private, offline-first app for photographing and collecting funny typos, mistranslations and signage mistakes. Build your own typo museum, battle friends by QR code, or run a class typo hunt. No account needed."
+    />
+    <link rel="canonical" href="https://typo-hunter-topaz.vercel.app/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="PrinceJoseph-software" />
+    <meta name="application-name" content="Typo Hunter" />
     <meta name="theme-color" content="#282722" />
+
+    <!-- Open Graph (link previews on WhatsApp, Facebook, LinkedIn, iMessage, Slack…) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Typo Hunter" />
+    <meta property="og:url" content="https://typo-hunter-topaz.vercel.app/" />
+    <meta property="og:title" content="Typo Hunter: collect the typos you spot in the wild" />
+    <meta
+      property="og:description"
+      content="The world is full of typos. Someone has to collect them. Photograph signage mistakes, build your typo museum, and battle friends. Free, offline, private."
+    />
+    <meta property="og:image" content="https://typo-hunter-topaz.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Typo Hunter: a menu reading 'Soap of the Day', corrected to 'Soup of the Day'." />
+    <meta property="og:locale" content="en_GB" />
+
+    <!-- X / Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Typo Hunter: collect the typos you spot in the wild" />
+    <meta
+      name="twitter:description"
+      content="Photograph signage mistakes, build your typo museum, battle friends by QR code. Free, offline, private."
+    />
+    <meta name="twitter:image" content="https://typo-hunter-topaz.vercel.app/og-image.png" />
+    <meta name="twitter:image:alt" content="Typo Hunter: a menu reading 'Soap of the Day', corrected to 'Soup of the Day'." />
+
+    <!-- Installable app -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Typo Hunter" />
-    <title>Typo Hunter</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- For AI assistants and LLM crawlers -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM-readable summary" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Typo Hunter",
+        "url": "https://typo-hunter-topaz.vercel.app/",
+        "image": "https://typo-hunter-topaz.vercel.app/og-image.png",
+        "description": "A free, private, offline-first app for photographing and collecting typos, mistranslations and signage mistakes found in the real world, with QR-code games for friends and class typo hunts for teachers.",
+        "slogan": "The world is full of typos. Someone has to collect them.",
+        "applicationCategory": "EducationalApplication",
+        "applicationSubCategory": "Photography, Language learning, Game",
+        "operatingSystem": "Any (web browser; installable on Android, iOS, Windows, macOS)",
+        "browserRequirements": "Requires JavaScript. Camera optional.",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "inLanguage": "en",
+        "license": "https://opensource.org/licenses/MIT",
+        "featureList": [
+          "Photograph and catalogue typos with what was written and what was meant",
+          "Personal typo museum with search, categories and a Hall of Fame",
+          "Points for well-documented finds, locked in once earned",
+          "Offline QR-code duels, timed Speed Blitz rounds and squad battles",
+          "Class typo hunts where teachers review and approve students' photos",
+          "Works offline and installs to the home screen",
+          "No account, no tracking: data stays on the device"
+        ],
+        "audience": [
+          { "@type": "Audience", "audienceType": "Language learners" },
+          { "@type": "EducationalAudience", "educationalRole": "teacher" },
+          { "@type": "EducationalAudience", "educationalRole": "student" }
+        ],
+        "author": { "@type": "Organization", "name": "PrinceJoseph-software", "url": "https://github.com/PrinceJoseph-software" },
+        "sameAs": ["https://github.com/PrinceJoseph-software/typo-hunter"]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main style="font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #282722;">
+        <h1>Typo Hunter</h1>
+        <p><strong>The world is full of typos. Someone has to collect them.</strong></p>
+        <p>
+          Typo Hunter is a free app for photographing and collecting language mistakes found in the wild: menus offering
+          "Soap of the Day", signs that went badly wrong, rogue apostrophes and hilarious translations. Write down what it
+          said and what it meant, and build your own typo museum.
+        </p>
+        <h2>Who it's for</h2>
+        <ul>
+          <li><strong>Collectors:</strong> keep every funny sign in one place, with the story behind it.</li>
+          <li><strong>Friends:</strong> phone-to-phone QR games with no internet needed: Quick Duel, Speed Blitz and squad battles.</li>
+          <li><strong>Teachers:</strong> run a class typo hunt; students hand in their photos and you approve each one.</li>
+          <li><strong>Language learners and travellers:</strong> learn from real mistakes and keep the best translations.</li>
+        </ul>
+        <p>Private by design: no account, no tracking, and your photos stay on your device. Works offline.</p>
+        <p>Typo Hunter needs JavaScript to run. Please enable it, or read the <a href="/privacy.html">privacy policy</a>.</p>
+      </main>
+    </noscript>
     <script type="module" src="../src/main.tsx"></script>
   </body>
 </html>

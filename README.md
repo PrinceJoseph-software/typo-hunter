@@ -2,6 +2,8 @@
 
 **The world is full of typos. Someone has to collect them.**
 
+**▶ Try it: [typo-hunter-topaz.vercel.app](https://typo-hunter-topaz.vercel.app/)**. It's free, needs no account and installs to your home screen.
+
 Typo Hunter turns your phone into a pocket museum for the language mistakes you find in the wild: the menu offering *"Soap of the Day"*, the sign warning that *"Trespassers will be composted"*, the price tag with an apostrophe that has no business being there.
 
 You snap the photo, write down what it said and what it *meant*, and the find joins your personal collection. It works offline, it needs no account, and your photos never leave your device.
