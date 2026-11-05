@@ -16,7 +16,6 @@ interface HomeProps {
   discoveries: Discovery[];
   nickname: string;
   onNavigate: (view: string, param?: string) => void;
-  onResetSample?: () => void;
   onOpenHelp?: () => void;
   onOpenPvp?: () => void;
   onOpenTeacherMode?: () => void;
@@ -34,7 +33,6 @@ export const Home: React.FC<HomeProps> = ({
   discoveries,
   nickname,
   onNavigate,
-  onResetSample,
   onOpenHelp,
   onOpenPvp,
   onOpenTeacherMode,
@@ -294,14 +292,6 @@ export const Home: React.FC<HomeProps> = ({
               >
                 Capture First Typo
               </button>
-              {onResetSample && (
-                <button
-                  onClick={onResetSample}
-                  className="btn-secondary py-2.5 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
-                >
-                  Load Sample Archive
-                </button>
-              )}
             </div>
           </div>
         )}

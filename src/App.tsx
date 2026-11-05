@@ -195,12 +195,6 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleResetSample = async () => {
-    await dbService.resetToSampleData();
-    await loadDiscoveries();
-    setCurrentView('home');
-  };
-
   const selectedDiscovery = discoveries.find(d => d.id === selectedDiscoveryId);
 
   if (loading) {
@@ -296,7 +290,6 @@ export function App() {
               discoveries={discoveries} 
               nickname={nickname}
               onNavigate={navigateTo} 
-              onResetSample={handleResetSample}
               onOpenHelp={() => setShowHelp(true)}
               onOpenPvp={() => setShowPvpArena(true)}
               onOpenTeacherMode={() => setShowTeacherMode(true)}
@@ -321,7 +314,6 @@ export function App() {
               discoveries={discoveries}
               onSelectDiscovery={(id) => navigateTo('detail', id)}
               onNavigateCapture={() => setCurrentView('capture')}
-              onResetSample={handleResetSample}
             />
           )}
           {currentView === 'detail' && selectedDiscovery && (
@@ -354,7 +346,6 @@ export function App() {
               onSelectDiscovery={(id) => navigateTo('detail', id)}
               onNavigateCapture={() => setCurrentView('capture')}
               onNavigateCollection={() => setCurrentView('collection')}
-              onResetSample={handleResetSample}
             />
           )}
           {currentView === 'profile' && (
@@ -363,7 +354,6 @@ export function App() {
               nickname={nickname}
               onUpdateNickname={setNickname}
               onImportComplete={loadDiscoveries}
-              onResetSample={handleResetSample}
               onOpenHelp={() => setShowHelp(true)}
               onOpenPvp={() => setShowPvpArena(true)}
               onOpenTeacherMode={() => setShowTeacherMode(true)}
@@ -406,11 +396,17 @@ export function App() {
         {/* Academic Terminal & Teacher Mode Modal */}
         <TeacherModeModal
           isOpen={showTeacherMode}
-          onClose={() => setShowTeacherMode(false)}
+          onClose={() => {
+            setShowTeacherMode(false);
+            // The student may have joined or left a class inside the terminal.
+            setActiveClassExpedition(teacherService.getActiveClassExpedition());
+          }}
           nickname={nickname}
           discoveries={discoveries}
-          onClassStarted={(expedition) => {
+          onClassJoined={(expedition) => {
+            // Student device: the teacher's Master QR starts the hunt for everyone who scans it.
             setActiveClassExpedition(expedition);
+            setShowTeacherMode(false);
             setCurrentView('capture');
           }}
         />

@@ -19,7 +19,6 @@ interface HallOfFameProps {
   onSelectDiscovery: (id: string) => void;
   onNavigateCapture?: () => void;
   onNavigateCollection?: () => void;
-  onResetSample?: () => void;
 }
 
 const StarRatingDisplay = ({ rating }: { rating: number }) => (
@@ -40,7 +39,6 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({
   onSelectDiscovery,
   onNavigateCapture,
   onNavigateCollection,
-  onResetSample,
 }) => {
   const hallOfFameItems = discoveries.filter(d => d.isHallOfFame);
   const featured = hallOfFameItems[0] || null;
@@ -173,15 +171,6 @@ export const HallOfFame: React.FC<HallOfFameProps> = ({
               >
                 <IconCamera size={14} />
                 <span>Spot a Typo Now</span>
-              </button>
-            )}
-            {onResetSample && (
-              <button
-                type="button"
-                onClick={onResetSample}
-                className="btn-secondary py-2.5 px-4 rounded-xl text-xs uppercase font-bold tracking-wider cursor-pointer"
-              >
-                Load Sample Archive (Demo)
               </button>
             )}
           </div>

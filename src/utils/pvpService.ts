@@ -9,8 +9,9 @@
  *     using standardized Curatorial Point algorithms and optical Proof-of-Sighting hashes.
  *   - Squad / Guild Identity: Curators can enlist in competitive factions
  *     (Red Pen Syndicate, Sign Raiders, Syntax Squad, The Proofreaders).
- *   - Multi-Curator Squad Battles: Pits 3v3, 3v2, 4v1 or N vs M teams together
- *     via QR optical scans with Cumulative Total or Average Point handicap scoring.
+ *   - Multi-Curator Squad Battles: Pits 3v3, 3v2, 3v1 or N vs M teams together.
+ *     Every hunter must join by scanning their own QR pass (no simulated players);
+ *     one side needs 3+ hunters, the other 1+. Uneven squads use Average scoring.
  *   - Time-Based Hunt Mode: Tracks timed expeditions (5m / 15m / 30m) with live countdowns.
  *   - Immutable Battle Ledger: Past PvP matches, win rates, and streaks are logged
  *     into localStorage with cryptographic verification stamps.
@@ -100,6 +101,22 @@ export interface SquadMember {
   specimens: number;
   legends: number;
   isHost?: boolean;
+  /** Fingerprint of the scanned QR pass (checksum or derived) used to block duplicate scans. */
+  passFingerprint?: string;
+  /** True when this hunter joined by scanning a real QR pass (or is the host device). */
+  verified?: boolean;
+}
+
+/** Squad battle roster rules: every hunter must join via QR; one side needs 3+. */
+export const SQUAD_RULES = {
+  minLargerTeam: 3,
+  minSmallerTeam: 1,
+  maxTeamSize: 8,
+};
+
+export interface SquadReadiness {
+  ready: boolean;
+  reason: string;
 }
 
 export interface SquadTeam {
@@ -185,34 +202,6 @@ export const pvpService = {
     }
 
     return { total, wins, losses, draws, winRate, streak };
-  },
-
-  /**
-   * Deterministically generates or calculates a rival challenger for quick offline duels.
-   */
-  generateChallenger(playerPoints: number, playerTeamId: string) {
-    const opponentTeams = PRESET_TEAMS.filter(t => t.id !== playerTeamId);
-    const opponentTeam = opponentTeams[Math.floor(Math.random() * opponentTeams.length)] || PRESET_TEAMS[1];
-    
-    const rivalNames = [
-      'Curator Jax', 'Professor Sterling', 'RedPen_Vance', 'Scout Miller',
-      'The Orthographer', 'Linguist Nova', 'SignHunter_Kai', 'Madame Comma'
-    ];
-    const opponentName = rivalNames[Math.floor(Math.random() * rivalNames.length)];
-
-    // Target score fluctuates +/- 25% around player score for competitive parity
-    const variance = (Math.random() * 0.5) - 0.22; // -22% to +28%
-    const opponentScore = Math.max(50, Math.round(playerPoints * (1 + variance)));
-    const opponentSpecimens = Math.max(1, Math.round(opponentScore / 75));
-    const opponentLegends = Math.floor(Math.random() * Math.min(4, opponentSpecimens + 1));
-
-    return {
-      opponentName,
-      opponentTeam,
-      opponentScore,
-      opponentSpecimens,
-      opponentLegends,
-    };
   },
 
   /**
@@ -354,7 +343,47 @@ export const pvpService = {
       specimens: typeof data.specimens === 'number' ? data.specimens : 0,
       legends: typeof data.legends === 'number' ? data.legends : 0,
       isHost: !!data.isHost,
+      passFingerprint: data.passFingerprint,
+      verified: !!data.verified || !!data.isHost,
     };
+  },
+
+  /**
+   * Checks whether two rosters can battle: N vs M where the larger side has at
+   * least 3 hunters, the smaller side has at least 1, and every hunter is QR-verified.
+   */
+  checkSquadReadiness(teamA: SquadMember[], teamB: SquadMember[]): SquadReadiness {
+    const unverified = [...teamA, ...teamB].filter(m => !m.verified && !m.isHost);
+    if (unverified.length > 0) {
+      return { ready: false, reason: `${unverified.length} hunter(s) not QR-verified. Every hunter must scan in.` };
+    }
+    if (teamA.length < SQUAD_RULES.minSmallerTeam || teamB.length < SQUAD_RULES.minSmallerTeam) {
+      return { ready: false, reason: 'Both squads need at least 1 hunter.' };
+    }
+    if (Math.max(teamA.length, teamB.length) < SQUAD_RULES.minLargerTeam) {
+      const larger = teamA.length >= teamB.length ? 'Team Alpha' : 'Team Omega';
+      const needed = SQUAD_RULES.minLargerTeam - Math.max(teamA.length, teamB.length);
+      return { ready: false, reason: `${larger} needs ${needed} more scanned hunter(s) — one squad must have 3+.` };
+    }
+    if (teamA.length > SQUAD_RULES.maxTeamSize || teamB.length > SQUAD_RULES.maxTeamSize) {
+      return { ready: false, reason: `Squads are capped at ${SQUAD_RULES.maxTeamSize} hunters.` };
+    }
+    return { ready: true, reason: `${teamA.length} vs ${teamB.length} squad clash ready.` };
+  },
+
+  /** Builds a stable fingerprint for a scanned pass so the same QR can't be added twice. */
+  passFingerprint(hunter: string, checksum?: string): string {
+    return `${hunter.trim().toLowerCase()}::${checksum || 'nochecksum'}`;
+  },
+
+  /** Returns the name of the roster that already contains this hunter, or null. */
+  findDuplicateHunter(teamA: SquadMember[], teamB: SquadMember[], hunter: string, fingerprint: string): 'Team Alpha' | 'Team Omega' | null {
+    const match = (m: SquadMember) =>
+      m.nickname.trim().toLowerCase() === hunter.trim().toLowerCase() ||
+      (!!m.passFingerprint && m.passFingerprint === fingerprint);
+    if (teamA.some(match)) return 'Team Alpha';
+    if (teamB.some(match)) return 'Team Omega';
+    return null;
   },
 
   calculateSquadStats(members: SquadMember[]): { totalPoints: number; averagePoints: number } {
@@ -366,7 +395,8 @@ export const pvpService = {
   resolveSquadClash(
     teamA: SquadTeam,
     teamB: SquadTeam,
-    scoringMode: 'total' | 'average'
+    scoringMode: 'total' | 'average',
+    logToLedger = true
   ): SquadBattleResult {
     const scoreA = scoringMode === 'total' ? teamA.totalPoints : teamA.averagePoints;
     const scoreB = scoringMode === 'total' ? teamB.totalPoints : teamB.averagePoints;
@@ -397,6 +427,8 @@ export const pvpService = {
       verificationHash,
     };
 
+    if (!logToLedger) return result;
+
     // Log to standard match history
     const matchRecord: PvpMatchRecord = {
       id: result.id,
@@ -417,33 +449,5 @@ export const pvpService = {
     this.saveMatch(matchRecord);
 
     return result;
-  },
-
-  generateRandomSquadMember(teamTag?: string, baseScore?: number): SquadMember {
-    const randomFactions = PRESET_TEAMS;
-    const team = teamTag 
-      ? PRESET_TEAMS.find(t => t.tag === teamTag) || PRESET_TEAMS[0]
-      : randomFactions[Math.floor(Math.random() * randomFactions.length)];
-    
-    const rosterNames = [
-      'Cadet Orion', 'Analyst Mira', 'FieldScout Echo', 'Curator Knox',
-      'Proof-Major Chen', 'Syntax-Sergeant Leo', 'Linguist Maya', 'Archivist Blake'
-    ];
-    const nickname = rosterNames[Math.floor(Math.random() * rosterNames.length)];
-    const baseline = baseScore && baseScore > 0 ? baseScore : 500;
-    const variance = (Math.random() * 0.4) - 0.2; // +/- 20%
-    const points = Math.max(80, Math.round(baseline * (1 + variance)));
-    const specimens = Math.max(1, Math.round(points / 65));
-    const legends = Math.floor(Math.random() * Math.min(3, specimens));
-
-    return {
-      id: `member_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      nickname,
-      teamTag: team.tag,
-      teamName: team.name,
-      points,
-      specimens,
-      legends,
-    };
   },
 };

@@ -27,6 +27,8 @@ interface BattleQrScannerModalProps {
     legends: number;
     rank?: string;
     team?: string;
+    teamTag?: string;
+    checksum?: string;
   }) => void;
   onClassJoined?: (classPayload: ClassExpeditionPayload) => void;
   onStudentSubmissionScanned?: (submission: StudentSubmissionPayload) => void;
@@ -80,6 +82,8 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
             legends: 0,
             rank: 'Challenger',
             team: `[${blitzPayload.hostTeamTag}] ${blitzPayload.hostTeam}`,
+            teamTag: blitzPayload.hostTeamTag,
+            checksum: blitzPayload.signature,
           });
         }, 600);
         return true;
@@ -98,7 +102,7 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
       const parsed = JSON.parse(decodedText);
 
       // A. Classroom Master QR scanned by student
-      if (parsed && parsed.app === 'TYPO_HUNTER_CLASS' && parsed.action === 'JOIN_CLASS_EXPEDITION') {
+      if (onClassJoined && parsed && parsed.app === 'TYPO_HUNTER_CLASS' && parsed.action === 'JOIN_CLASS_EXPEDITION') {
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate([100, 50, 100]);
         }
@@ -113,7 +117,7 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
       }
 
       // B. Student Assignment Submission scanned by teacher
-      if (parsed && parsed.app === 'TYPO_HUNTER_SUBMISSION' && parsed.action === 'SUBMIT_ASSIGNMENT') {
+      if (onStudentSubmissionScanned && parsed && parsed.app === 'TYPO_HUNTER_SUBMISSION' && parsed.action === 'SUBMIT_ASSIGNMENT') {
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
           navigator.vibrate(200);
         }
@@ -140,6 +144,8 @@ export const BattleQrScannerModal: React.FC<BattleQrScannerModalProps> = ({
               legends: parsed.legends || 0,
               rank: parsed.rank,
               team: parsed.team,
+              teamTag: typeof parsed.teamTag === 'string' ? parsed.teamTag : undefined,
+              checksum: typeof parsed.checksum === 'string' ? parsed.checksum : undefined,
             });
           }, 600);
           return true;

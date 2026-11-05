@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { Discovery } from '../db/database';
 import { calculateTotalCuratorPoints } from '../utils/proofOfSighting';
 import { IconClose } from './Icons';
+import { pvpService } from '../utils/pvpService';
 
 interface CuratorPassModalProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
   };
 
   const rank = getRank(specimenCount);
+  const squad = pvpService.getCurrentTeam();
 
   // Compact payload structure with points and cryptographic proof fingerprint
   const payload = {
@@ -45,6 +47,8 @@ export const CuratorPassModal: React.FC<CuratorPassModalProps> = ({
     v: 1,
     hunter: nickname.trim() || 'Hunter',
     rank,
+    team: squad.name,
+    teamTag: squad.tag,
     points: totalPoints,
     specimens: specimenCount,
     legends: legendCount,

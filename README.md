@@ -328,12 +328,26 @@ Typo Hunter features an offline-first peer-to-peer multiplayer competition suite
 
 2. **Quick Duel (Curator Pass Battle)**:
    - Tap **'Scan Rival Pass & Battle'** to point the camera at any friend's standard Curator Field Pass QR.
+   - There are no random or simulated opponents: the rival is always a real friend, either scanned from their pass or entered by hand (name + score).
    - The scanner instantly parses the friend's verifiable specimen count, curatorial points, and Hall of Fame legends.
    - Compares metrics in an editorial head-to-head match and determines Victory, Defeat, or Draw.
 
 3. **Sudden-Death 2-Minute Tie-Breaker**:
    - If a duel or blitz ends in an exact point tie (DRAW), the system initiates an emergency 2-minute sudden-death hunt.
    - The first player to photograph and document any valid typo within 120 seconds claims the tie-breaker crown.
+
+### A2. QR-Verified Squad Battles (N vs M)
+- **Every hunter scans in.** Each player shows their own Curator Pass QR and the host scans it into Team Alpha or Team Omega. There are no simulated or "add scout" players.
+- **Roster rule:** one squad needs **3+ hunters**, the other **1+** (3v3, 3v2, 3v1, 4v2… up to 8 per side). 1v1 and 2v2 belong in Quick Duel.
+- **No double entries:** the same hunter (by name or pass checksum) can't be scanned twice, or onto both squads.
+- **Fair scoring:** uneven squads are locked to *Squad Average* so headcount alone can't win; equal squads can pick *Total* or *Average*.
+
+### A3. Teacher Mode: Running the Whole Class
+- **Start once, everyone joins:** the teacher starts a class and projects the Master QR. The QR always encodes that live class (same class ID), so every student who scans it joins the same session and starts their hunt immediately.
+- **Student side:** Teacher Mode → *Student* tab → *Scan Teacher's Class QR*, then show the Submission QR back to the teacher when done.
+- **Class roster:** the teacher scans each student's Submission QR or Curator Pass (or imports their signed `.json` archive). The roster is ranked by points, flags unverified checksums and students from a different class, and *View full record* shows each student's details (the full specimen list when an archive was imported).
+- **Class squad battles:** in the *Squads* tab the teacher puts scanned students into Alpha / Omega / Bench (or auto-balances them) and referees a class battle under the same 3+ vs 1+ rule. Class battles are kept in a separate class ledger, not the teacher's personal PvP record.
+- The teacher's *hosted* class and a student's *joined* class are stored separately, so one device's role never overwrites the other.
 
 ### B. Curatorial Squads (Teams)
 Curators can pledge allegiance to one of four historic typographical factions:
