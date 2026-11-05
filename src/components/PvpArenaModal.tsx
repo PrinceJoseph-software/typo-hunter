@@ -19,6 +19,7 @@ import {
   pvpService,
   CuratorTeam,
   PRESET_TEAMS,
+  SQUAD_RULES,
   PvpMatchRecord,
   SpeedBlitzPayload,
   SquadMember,
@@ -95,6 +96,12 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
   const [squadClashResult, setSquadClashResult] = useState<SquadBattleResult | null>(null);
   const [scannerTargetTeam, setScannerTargetTeam] = useState<'teamA' | 'teamB' | null>(null);
   const [squadSubTab, setSquadSubTab] = useState<'battle' | 'allegiance'>('battle');
+  const [squadNotice, setSquadNotice] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
+
+  const squadReadiness = pvpService.checkSquadReadiness(squadTeamA, squadTeamB);
+  const squadsUneven = squadTeamA.length !== squadTeamB.length;
+  // Uneven squads (3v2, 3v1, 4v2…) always use the Average handicap so headcount can't decide the match.
+  const effectiveScoringMode: 'total' | 'average' = squadsUneven ? 'average' : squadScoringMode;
 
   useEffect(() => {
     if (isOpen) {
@@ -115,13 +122,10 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
         }),
       ]);
 
-      // Initialize Squad Team B with rival squad scouts
-      const rivalFaction = PRESET_TEAMS.find(t => t.id !== activeTeam.id) || PRESET_TEAMS[1];
-      setSquadTeamB([
-        pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints),
-        pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints),
-      ]);
+      // Team Omega starts empty: every rival must scan in with their own QR pass.
+      setSquadTeamB([]);
       setSquadClashResult(null);
+      setSquadNotice(null);
     }
   }, [isOpen, nickname, totalPoints, specimenCount, legendCount]);
 
@@ -174,18 +178,12 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     });
   };
 
-  const handleAddSquadMember = (team: 'A' | 'B') => {
-    if (team === 'A') {
-      const newMember = pvpService.generateRandomSquadMember(currentTeam.tag, totalPoints);
-      setSquadTeamA(prev => [...prev, newMember]);
-    } else {
-      const rivalFaction = PRESET_TEAMS.find(t => t.id !== currentTeam.id) || PRESET_TEAMS[1];
-      const newMember = pvpService.generateRandomSquadMember(rivalFaction.tag, totalPoints);
-      setSquadTeamB(prev => [...prev, newMember]);
-    }
-  };
-
   const handleScanSquadMember = (team: 'A' | 'B') => {
+    const roster = team === 'A' ? squadTeamA : squadTeamB;
+    if (roster.length >= SQUAD_RULES.maxTeamSize) {
+      setSquadNotice({ tone: 'warn', text: `Squads are capped at ${SQUAD_RULES.maxTeamSize} hunters.` });
+      return;
+    }
     setScannerTargetTeam(team === 'A' ? 'teamA' : 'teamB');
     setScannerMode('pass');
     setShowQrScanner(true);
@@ -197,9 +195,14 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     } else {
       setSquadTeamB(prev => prev.filter(m => m.id !== id));
     }
+    setSquadClashResult(null);
   };
 
   const handleExecuteSquadClash = () => {
+    if (!squadReadiness.ready) {
+      setSquadNotice({ tone: 'warn', text: squadReadiness.reason });
+      return;
+    }
     const statsA = pvpService.calculateSquadStats(squadTeamA);
     const statsB = pvpService.calculateSquadStats(squadTeamB);
 
@@ -220,7 +223,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
       averagePoints: statsB.averagePoints,
     };
 
-    const result = pvpService.resolveSquadClash(teamA, teamB, squadScoringMode);
+    const result = pvpService.resolveSquadClash(teamA, teamB, effectiveScoringMode);
     setSquadClashResult(result);
     setHistory(pvpService.getMatchHistory());
     setStats(pvpService.getPvpStats());
@@ -233,35 +236,49 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
     legends: number;
     rank?: string;
     team?: string;
+    teamTag?: string;
+    checksum?: string;
   }) => {
     setShowQrScanner(false);
 
-    // If scanning for Multi-Hunter Squad Clash:
-    if (scannerTargetTeam === 'teamA') {
-      const newMember = pvpService.createSquadMember({
-        nickname: passData.hunter,
-        points: passData.points,
-        specimens: passData.specimens,
-        legends: passData.legends,
-        teamTag: (passData.team ? passData.team.slice(0, 4) : currentTeam.tag).toUpperCase(),
-      });
-      setSquadTeamA(prev => [...prev, newMember]);
+    // If scanning for Multi-Hunter Squad Clash: every hunter must be a real, unique QR pass.
+    if (scannerTargetTeam) {
+      const isAlpha = scannerTargetTeam === 'teamA';
+      const fingerprint = pvpService.passFingerprint(passData.hunter, passData.checksum);
+      const duplicateIn = pvpService.findDuplicateHunter(squadTeamA, squadTeamB, passData.hunter, fingerprint);
       setScannerTargetTeam(null);
       setActiveTab('team');
-      return;
-    }
+      setSquadSubTab('battle');
 
-    if (scannerTargetTeam === 'teamB') {
+      if (duplicateIn) {
+        setSquadNotice({ tone: 'warn', text: `${passData.hunter} is already on ${duplicateIn}. Each hunter can only scan in once.` });
+        return;
+      }
+
+      const fallbackTag = isAlpha
+        ? currentTeam.tag
+        : (PRESET_TEAMS.find(t => t.id !== currentTeam.id) || PRESET_TEAMS[1]).tag;
       const newMember = pvpService.createSquadMember({
         nickname: passData.hunter,
         points: passData.points,
         specimens: passData.specimens,
         legends: passData.legends,
-        teamTag: (passData.team ? passData.team.slice(0, 4) : 'RIV').toUpperCase(),
+        teamTag: passData.teamTag || fallbackTag,
+        passFingerprint: fingerprint,
+        verified: true,
       });
-      setSquadTeamB(prev => [...prev, newMember]);
-      setScannerTargetTeam(null);
-      setActiveTab('team');
+
+      const nextA = isAlpha ? [...squadTeamA, newMember] : squadTeamA;
+      const nextB = isAlpha ? squadTeamB : [...squadTeamB, newMember];
+      if (isAlpha) setSquadTeamA(nextA);
+      else setSquadTeamB(nextB);
+      setSquadClashResult(null);
+
+      const readiness = pvpService.checkSquadReadiness(nextA, nextB);
+      setSquadNotice({
+        tone: readiness.ready ? 'ok' : 'warn',
+        text: `${passData.hunter} joined ${isAlpha ? 'Team Alpha' : 'Team Omega'} (${passData.points} pts). ${readiness.reason}`,
+      });
       return;
     }
 
@@ -779,7 +796,9 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                           Handicap & Scoring Rule:
                         </span>
                         <span className="text-[9px] font-bold text-[#D66A4A]">
-                          {squadScoringMode === 'average' ? 'FAIR HANDICAP ACTIVE' : 'UNSCALED SUM'}
+                          {squadsUneven
+                            ? 'UNEVEN SQUADS · AVERAGE LOCKED'
+                            : effectiveScoringMode === 'average' ? 'FAIR HANDICAP ACTIVE' : 'UNSCALED SUM'}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-1.5">
@@ -787,7 +806,7 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                           type="button"
                           onClick={() => setSquadScoringMode('average')}
                           className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer border ${
-                            squadScoringMode === 'average'
+                            effectiveScoringMode === 'average'
                               ? 'bg-[#82917B] text-white border-black shadow-xs'
                               : 'bg-gray-50 text-gray-600 border-gray-300'
                           }`}
@@ -797,8 +816,10 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setSquadScoringMode('total')}
-                          className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer border ${
-                            squadScoringMode === 'total'
+                          disabled={squadsUneven}
+                          title={squadsUneven ? 'Total scoring needs equal squad sizes' : undefined}
+                          className={`py-1.5 px-2 rounded-lg text-[10px] font-bold uppercase tracking-wider border disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+                            effectiveScoringMode === 'total'
                               ? 'bg-black text-[#E8B92D] border-black shadow-xs'
                               : 'bg-gray-50 text-gray-600 border-gray-300'
                           }`}
@@ -865,21 +886,15 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                         </div>
 
                         {/* Add Teammate Actions */}
-                        <div className="grid grid-cols-2 gap-1 pt-1">
+                        <div className="pt-1">
                           <button
                             type="button"
                             onClick={() => handleScanSquadMember('A')}
-                            className="btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                            disabled={squadTeamA.length >= SQUAD_RULES.maxTeamSize}
+                            className="w-full btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
                           >
                             <IconCamera size={10} />
-                            <span>Scan QR Pass</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAddSquadMember('A')}
-                            className="btn-secondary py-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
-                          >
-                            + Add Scout
+                            <span>Scan Teammate's QR Pass</span>
                           </button>
                         </div>
                       </div>
@@ -897,6 +912,11 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
 
                         {/* Member Roster */}
                         <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                          {squadTeamB.length === 0 && (
+                            <p className="text-[10px] text-gray-500 italic text-center py-3">
+                              No rivals yet. Each rival shows their Curator Pass QR and you scan it.
+                            </p>
+                          )}
                           {squadTeamB.map((member) => (
                             <div
                               key={member.id}
@@ -929,25 +949,46 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                         </div>
 
                         {/* Add Rival Actions */}
-                        <div className="grid grid-cols-2 gap-1 pt-1">
+                        <div className="pt-1">
                           <button
                             type="button"
                             onClick={() => handleScanSquadMember('B')}
-                            className="btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
+                            disabled={squadTeamB.length >= SQUAD_RULES.maxTeamSize}
+                            className="w-full btn-primary py-1.5 text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40"
                           >
                             <IconCamera size={10} />
-                            <span>Scan QR Pass</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAddSquadMember('B')}
-                            className="btn-secondary py-1.5 text-[9px] font-bold uppercase tracking-wider cursor-pointer"
-                          >
-                            + Add Rival
+                            <span>Scan Rival's QR Pass</span>
                           </button>
                         </div>
                       </div>
                     </div>
+
+                    {/* Roster Rules & Readiness */}
+                    <div
+                      className={`p-2.5 rounded-xl border-2 text-[10px] leading-relaxed ${
+                        squadReadiness.ready ? 'bg-[#EBF3E8] border-[#82917B] text-[#2D5A27]' : 'bg-[#FFF9EC] border-black/30 text-gray-700'
+                      }`}
+                      role="status"
+                    >
+                      <span className="font-bold uppercase block">
+                        {squadReadiness.ready ? 'Ready to battle' : 'Squad rules'}
+                      </span>
+                      <span className="block">
+                        Every hunter scans in with their own QR pass. One squad needs {SQUAD_RULES.minLargerTeam}+ hunters; the other can have {SQUAD_RULES.minSmallerTeam}–{SQUAD_RULES.maxTeamSize} (3v3, 3v2, 3v1, 4v2…).
+                      </span>
+                      {!squadReadiness.ready && <span className="block font-bold mt-0.5">{squadReadiness.reason}</span>}
+                    </div>
+
+                    {squadNotice && (
+                      <div
+                        className={`p-2 rounded-lg border text-[10px] font-bold ${
+                          squadNotice.tone === 'ok' ? 'bg-white border-[#82917B] text-[#2D5A27]' : 'bg-[#FDF2F0] border-[#D66A4A] text-[#D66A4A]'
+                        }`}
+                        role="alert"
+                      >
+                        {squadNotice.text}
+                      </div>
+                    )}
 
                     {/* Clash Verdict Banner */}
                     {squadClashResult && (
@@ -984,7 +1025,8 @@ export const PvpArenaModal: React.FC<PvpArenaModalProps> = ({
                     <button
                       type="button"
                       onClick={handleExecuteSquadClash}
-                      className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal flex items-center justify-center gap-2"
+                      disabled={!squadReadiness.ready}
+                      className="w-full btn-primary py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer shadow-brutal flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <IconSwords size={16} />
                       <span>

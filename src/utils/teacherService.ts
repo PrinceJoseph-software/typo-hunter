@@ -15,6 +15,7 @@
 
 import { Discovery } from '../db/database';
 import { calculateTotalCuratorPoints } from './proofOfSighting';
+import { pvpService, SquadMember, SquadTeam, SquadBattleResult } from './pvpService';
 
 export interface ClassExpedition {
   classId: string;
@@ -54,6 +55,17 @@ export interface StudentSubmission {
   antiCheatHash: string;
   submittedAt: string;
   teacherCommendation?: string;
+  /** How the student reached the roster. Only QR/archive entries can join class squads. */
+  source?: 'qr_submission' | 'qr_pass' | 'archive' | 'demo';
+  /** False when the student submitted for a different class than the one being hosted. */
+  classMatch?: boolean;
+  /** Specimen titles (available when the student shares a full signed archive). */
+  specimenTitles?: string[];
+}
+
+export interface ClassSquadAssignments {
+  alpha: string[];
+  omega: string[];
 }
 
 export interface StudentSubmissionPayload {
@@ -72,6 +84,9 @@ export interface StudentSubmissionPayload {
 const STORAGE_ACTIVE_CLASS = 'typo_hunter_active_class_expedition';
 const STORAGE_GRADEBOOK = 'typo_hunter_teacher_gradebook';
 const STORAGE_TEACHER_PROFILE = 'typo_hunter_teacher_profile';
+const STORAGE_HOSTED_CLASS = 'typo_hunter_teacher_hosted_class';
+const STORAGE_CLASS_SQUADS = 'typo_hunter_teacher_class_squads';
+const STORAGE_CLASS_BATTLES = 'typo_hunter_teacher_class_battles';
 
 export const teacherService = {
   getTeacherProfile(): { instructorName: string; defaultClassName: string } {
@@ -106,6 +121,144 @@ export const teacherService = {
     localStorage.removeItem(STORAGE_ACTIVE_CLASS);
   },
 
+  /** The class this device is HOSTING as a teacher (separate from a class a student joined). */
+  getHostedClass(): ClassExpedition | null {
+    try {
+      const data = localStorage.getItem(STORAGE_HOSTED_CLASS);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setHostedClass(expedition: ClassExpedition): void {
+    localStorage.setItem(STORAGE_HOSTED_CLASS, JSON.stringify(expedition));
+  },
+
+  clearHostedClass(): void {
+    localStorage.removeItem(STORAGE_HOSTED_CLASS);
+  },
+
+  expeditionToPayload(expedition: ClassExpedition): ClassExpeditionPayload {
+    return { app: 'TYPO_HUNTER_CLASS', action: 'JOIN_CLASS_EXPEDITION', ...expedition };
+  },
+
+  payloadToExpedition(payload: ClassExpeditionPayload): ClassExpedition {
+    return {
+      classId: payload.classId,
+      className: payload.className,
+      instructorName: payload.instructorName,
+      durationMinutes: payload.durationMinutes,
+      targetPoints: payload.targetPoints,
+      objective: payload.objective,
+      timestamp: payload.timestamp,
+      signature: payload.signature,
+    };
+  },
+
+  /**
+   * Converts a scanned student QR (assignment submission or plain Curator Pass)
+   * into a gradebook row, checking its checksum and class.
+   */
+  submissionFromScan(
+    scan: {
+      studentName: string;
+      squadFaction?: string;
+      points: number;
+      specimens: number;
+      legends: number;
+      checksum?: string;
+      classId?: string;
+      kind: 'qr_submission' | 'qr_pass';
+    },
+    hostedClass: ClassExpedition | null
+  ): StudentSubmission {
+    const target = hostedClass?.targetPoints || 250;
+    const { grade, status } = this.calculateGrade(scan.points, target);
+    const expectedPrefix =
+      scan.kind === 'qr_submission'
+        ? `SUBMIT-${scan.points}-${scan.specimens}-`
+        : `TPH-${scan.points}-`;
+    const tamperVerified = !!scan.checksum && scan.checksum.startsWith(expectedPrefix);
+    const classMatch = !hostedClass || !scan.classId || scan.classId === hostedClass.classId;
+
+    return {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      studentName: scan.studentName.trim() || 'Student',
+      squadFaction: scan.squadFaction || 'SYN',
+      classId: scan.classId || hostedClass?.classId || 'INDEPENDENT',
+      points: scan.points,
+      specimensCataloged: scan.specimens,
+      legendsEnshrined: scan.legends,
+      grade,
+      status,
+      tamperVerified,
+      antiCheatHash: scan.checksum || 'UNSIGNED',
+      submittedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      source: scan.kind,
+      classMatch,
+    };
+  },
+
+  getClassSquads(): ClassSquadAssignments {
+    try {
+      const data = localStorage.getItem(STORAGE_CLASS_SQUADS);
+      const parsed = data ? JSON.parse(data) : null;
+      if (parsed && Array.isArray(parsed.alpha) && Array.isArray(parsed.omega)) return parsed;
+    } catch {
+      // fall through
+    }
+    return { alpha: [], omega: [] };
+  },
+
+  saveClassSquads(squads: ClassSquadAssignments): void {
+    localStorage.setItem(STORAGE_CLASS_SQUADS, JSON.stringify(squads));
+  },
+
+  /** Only students who reached the roster through a real QR scan or signed archive can battle. */
+  isSquadEligible(student: StudentSubmission): boolean {
+    return student.source !== 'demo' && !student.id.startsWith('demo_');
+  },
+
+  studentToSquadMember(student: StudentSubmission): SquadMember {
+    return pvpService.createSquadMember({
+      id: student.id,
+      nickname: student.studentName,
+      teamTag: student.squadFaction,
+      points: student.points,
+      specimens: student.specimensCataloged,
+      legends: student.legendsEnshrined,
+      passFingerprint: pvpService.passFingerprint(student.studentName, student.antiCheatHash),
+      verified: this.isSquadEligible(student),
+    });
+  },
+
+  getClassBattles(): SquadBattleResult[] {
+    try {
+      const data = localStorage.getItem(STORAGE_CLASS_BATTLES);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  /** Runs a teacher-refereed class squad battle and logs it to the class ledger (not the teacher's own PvP stats). */
+  runClassSquadBattle(alpha: SquadMember[], omega: SquadMember[], scoringMode: 'total' | 'average'): SquadBattleResult {
+    const statsA = pvpService.calculateSquadStats(alpha);
+    const statsB = pvpService.calculateSquadStats(omega);
+    const teamA: SquadTeam = { id: 'alpha', name: 'Class Squad Alpha', members: alpha, ...statsA };
+    const teamB: SquadTeam = { id: 'omega', name: 'Class Squad Omega', members: omega, ...statsB };
+    const result = pvpService.resolveSquadClash(teamA, teamB, scoringMode, false);
+    try {
+      const list = this.getClassBattles();
+      list.unshift(result);
+      localStorage.setItem(STORAGE_CLASS_BATTLES, JSON.stringify(list.slice(0, 30)));
+    } catch (err) {
+      console.error('Failed to save class battle', err);
+    }
+    return result;
+  },
+
   getClassGradebook(): StudentSubmission[] {
     try {
       const data = localStorage.getItem(STORAGE_GRADEBOOK);
@@ -121,7 +274,8 @@ export const teacherService = {
       s => s.studentName.toLowerCase() === submission.studentName.toLowerCase()
     );
     if (existingIndex >= 0) {
-      list[existingIndex] = submission;
+      // Keep the original id so the student's class-squad assignment survives a re-scan.
+      list[existingIndex] = { ...submission, id: list[existingIndex].id };
     } else {
       list.unshift(submission);
     }
@@ -131,10 +285,16 @@ export const teacherService = {
   removeStudentFromGradebook(id: string): void {
     const list = this.getClassGradebook().filter(s => s.id !== id);
     localStorage.setItem(STORAGE_GRADEBOOK, JSON.stringify(list));
+    const squads = this.getClassSquads();
+    this.saveClassSquads({
+      alpha: squads.alpha.filter(x => x !== id),
+      omega: squads.omega.filter(x => x !== id),
+    });
   },
 
   clearGradebook(): void {
     localStorage.removeItem(STORAGE_GRADEBOOK);
+    localStorage.removeItem(STORAGE_CLASS_SQUADS);
   },
 
   calculateGrade(points: number, targetPoints: number): { grade: string; status: 'HONORS' | 'PASSED' | 'PENDING' } {

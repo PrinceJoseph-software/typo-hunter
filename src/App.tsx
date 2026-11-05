@@ -406,11 +406,17 @@ export function App() {
         {/* Academic Terminal & Teacher Mode Modal */}
         <TeacherModeModal
           isOpen={showTeacherMode}
-          onClose={() => setShowTeacherMode(false)}
+          onClose={() => {
+            setShowTeacherMode(false);
+            // The student may have joined or left a class inside the terminal.
+            setActiveClassExpedition(teacherService.getActiveClassExpedition());
+          }}
           nickname={nickname}
           discoveries={discoveries}
-          onClassStarted={(expedition) => {
+          onClassJoined={(expedition) => {
+            // Student device: the teacher's Master QR starts the hunt for everyone who scans it.
             setActiveClassExpedition(expedition);
+            setShowTeacherMode(false);
             setCurrentView('capture');
           }}
         />
