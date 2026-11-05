@@ -34,7 +34,7 @@ This data is not sent to us or to any server we run. We have no copy of it.
 
 Data leaves your device only in these cases:
 
-1. **QR codes you choose to show.** A Curator Pass, Speed Blitz code or class submission contains your display name, squad, points, number of finds and random device ID. Anyone who scans your screen can read this.
+1. **QR codes you choose to show.** Your Curator Pass contains your display name, squad, rank, points, number of finds, the title and rating of your best find, and your random device ID. Speed Blitz and class codes contain your name, score and device ID. Anyone who scans your screen can read this.
 2. **Files you choose to share.** A backup file contains your whole collection, including photos. A class review file contains the photos you took during that class. You decide where these go (for example AirDrop, email or a USB stick).
 3. **Share cards.** If you share a find, the image card goes wherever you send it.
 4. **Loading the app.** Like any website, the server that delivers the app (our hosting provider) receives standard technical information, such as your IP address and browser type, when you open it online. The app also loads fonts from Google Fonts, so Google receives a similar request. Neither request includes your photos or collection.
@@ -68,4 +68,4 @@ If the app changes in a way that affects your privacy, for example by adding an 
 
 ## Contact
 
-Questions about privacy? Open an issue on the project's GitHub repository: <https://github.com/PrinceJoseph-software/typo-hunter/issues>.
+Questions about privacy? [Open an issue](https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose) on the project's GitHub repository. The same policy is shown inside the app under **Help → Privacy**.

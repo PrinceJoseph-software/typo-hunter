@@ -1,0 +1,34 @@
+name: Suggest an idea
+description: An idea for a new feature or an improvement.
+title: "[Idea]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do that you can't do today?
+      placeholder: As a teacher, I'd like to ...
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How could the app help with this?
+    validations:
+      required: true
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who would this help most?
+      options:
+        - Collectors
+        - Friends playing together
+        - Teachers and students
+        - Language learners
+        - Travellers
+        - Everyone
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?

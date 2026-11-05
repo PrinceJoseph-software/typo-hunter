@@ -31,3 +31,13 @@ export const ROTATING_PROMPTS = [
   "Spotted a parking sign that contradicts itself? Archive the bureaucratic confusion.",
   "Found a handwritten note on a staff refrigerator with aggressive underline energy? Enshrine it.",
 ] as const;
+
+/** Public project links (opened in a new tab; need a connection). */
+export const PROJECT_LINKS = {
+  repo: 'https://github.com/PrinceJoseph-software/typo-hunter',
+  reportProblem: 'https://github.com/PrinceJoseph-software/typo-hunter/issues/new/choose',
+  privacyPolicy: 'https://github.com/PrinceJoseph-software/typo-hunter/blob/main/PRIVACY.md',
+} as const;
+
+/** Date of the current privacy policy (keep in sync with PRIVACY.md). */
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '5 November 2026';

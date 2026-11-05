@@ -1,16 +1,32 @@
 /**
  * @file PrivacyModal.tsx
- * @description Editorial Privacy Policy, Zero-Cookie Disclosure, and Local Data Rights modal.
+ * @description In-app privacy policy. Mirrors PRIVACY.md in the repository;
+ * keep both (and PRIVACY_POLICY_EFFECTIVE_DATE) in sync when either changes.
  */
 
 import React, { useRef } from 'react';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { IconClose } from './Icons';
+import { PROJECT_LINKS, PRIVACY_POLICY_EFFECTIVE_DATE } from '../utils/constants';
 
 interface PrivacyModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const Section: React.FC<{ title: string; badge?: string; children: React.ReactNode }> = ({ title, badge, children }) => (
+  <section className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
+    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+      {badge && (
+        <span className="bg-[#E8B92D] text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-black">
+          {badge}
+        </span>
+      )}
+      <h3 className="font-heading font-extrabold text-sm text-black">{title}</h3>
+    </div>
+    <div className="text-gray-700 space-y-1.5">{children}</div>
+  </section>
+);
 
 export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -19,146 +35,148 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs" 
+    <div
       ref={dialogRef}
-      role="dialog" 
-      aria-modal="true" 
-      aria-label="Privacy Policy & Cookies Disclosure"
+      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Privacy policy"
     >
       <div className="editorial-card bg-[#F4EBDD] p-5 sm:p-6 rounded-2xl max-w-lg w-full relative shadow-brutal-lg border-2 border-black max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-start border-b-2 border-black pb-3 mb-4 flex-shrink-0">
           <div>
             <span className="text-[10px] font-mono font-bold tracking-widest text-[#D66A4A] uppercase block">
-              Curatorial Trust Agreement
+              Effective {PRIVACY_POLICY_EFFECTIVE_DATE}
             </span>
             <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-black leading-tight">
-              Privacy & Zero-Cookie Policy
+              Privacy Policy
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-full border-2 border-black bg-white flex items-center justify-center font-bold text-xs shadow-brutal-sm hover:bg-gray-100 cursor-pointer flex-shrink-0"
-            aria-label="Close Privacy Policy"
+            className="w-8 h-8 rounded-full border-2 border-black bg-white flex items-center justify-center font-bold text-xs shadow-brutal-sm hover:bg-gray-100 cursor-pointer flex-shrink-0"
+            aria-label="Close privacy policy"
           >
             <IconClose size={12} />
           </button>
         </div>
 
-        {/* Scrollable Content */}
+        {/* Content */}
         <div className="overflow-y-auto pr-1 space-y-4 font-mono text-xs text-gray-800 leading-relaxed flex-1">
-          {/* Section 1: Zero Cookies */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#82917B] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                Zero Trackers
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                1. No Cookies. Period.
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              TYPO HUNTER sets <strong>zero HTTP cookies</strong>, zero advertising beacons, and zero third-party tracking scripts.
-              Unlike commercial web applications that track user sessions across websites, our application requires no session tokens, no identity graph, and no cookie consent popups.
-            </p>
-          </div>
+          <Section title="The short version" badge="On your device">
+            <ul className="list-disc pl-4 space-y-1">
+              <li>No accounts, no sign-up, no passwords.</li>
+              <li>No analytics, no advertising, no tracking cookies.</li>
+              <li>Your photos, notes and scores are stored only in this browser on this device.</li>
+              <li>Nothing is shared unless <strong>you</strong> show a QR code or send a file.</li>
+            </ul>
+          </Section>
 
-          {/* Section 2: Local Storage Only */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#E8B92D] text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-black">
-                100% Offline
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                2. On-Device Sovereign Storage
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              Every photograph you capture, title you author, location note you record, and Hall of Fame nomination you cast is saved strictly into your browser's local <strong>IndexedDB</strong> and <strong>localStorage</strong>. 
-              Data never travels over the network to any remote server or cloud database.
+          <Section title="What is stored on your device">
+            <p>
+              Your photos (full size and a small thumbnail), what you type (titles, wording, corrections, locations,
+              notes), your ratings and Legends picks, locked points, display name and squad, battle history, settings,
+              the time of your last capture, a class list if you use Teacher Mode, and a random device ID that tells
+              players apart when names are the same.
             </p>
-          </div>
+            <p>None of this is sent to us or to any server we run. We have no copy of it.</p>
+            <p>
+              Typo Hunter never reads your GPS location. The location field is text you type yourself.
+            </p>
+          </Section>
 
-          {/* Section 3: Hardware & Camera Permissions */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#D66A4A] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                Hardware
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                3. Camera & Gallery Access
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              When capturing a specimen, browser camera permissions are requested solely to stream frames to an HTML5 Canvas for local compression and cropping. Photographs are immediately serialized into compressed data payloads directly in local storage. Photos are never transmitted outside your physical device.
-            </p>
-          </div>
+          <Section title="What leaves your device, and when">
+            <ol className="list-decimal pl-4 space-y-1.5">
+              <li>
+                <strong>QR codes you show.</strong> Your Curator Pass contains your display name, squad, rank, points,
+                number of finds, the title and rating of your best find, and your device ID. Speed Blitz and class
+                codes contain your name, score and device ID. Anyone who scans your screen can read them.
+              </li>
+              <li>
+                <strong>Files you send.</strong> A backup contains your whole collection, including photos. A class
+                review file contains the photos you took during that class. You choose where they go.
+              </li>
+              <li>
+                <strong>Share cards.</strong> If you share a find, the image goes wherever you send it.
+              </li>
+              <li>
+                <strong>Opening the app online.</strong> Like any website, our hosting provider receives standard
+                technical information (such as your IP address and browser type). Fonts load from Google Fonts, so
+                Google receives a similar request. Neither includes your photos or collection.
+              </li>
+            </ol>
+          </Section>
 
-          {/* Section 4: Peer-to-Peer QR Transmission */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-black text-[#E8B92D] text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                Optical P2P
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                4. Peer-to-Peer QR Code Privacy
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              The <strong>Offline Curator Pass</strong> converts your rank, specimen count, and top typo into an optical 2D barcode on your physical screen. Scanning is optical (camera lens to display screen). No Bluetooth, local Wi-Fi pairing, or cloud mediator is involved.
+          <Section title="Camera and notifications">
+            <p>
+              The camera is used only when you take a photo or scan a QR code, and images are processed on your device.
             </p>
-          </div>
+            <p>
+              Notifications are off unless you turn them on. Reminders are created on your device; on some browsers
+              your browser schedules them in the background. No push service or notification server is used.
+            </p>
+          </Section>
 
-          {/* Section 5: Data Ownership & Portability */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <h3 className="font-heading font-extrabold text-sm text-black mb-1">
-              5. Total Data Ownership & Export
-            </h3>
-            <p className="text-gray-700">
-              You own all intellectual property documented in your personal museum. You can export your full museum as a backup file at any time from the Curator Profile. Clearing this site's data in your browser deletes everything, so keep a backup.
+          <Section title="Children and classrooms">
+            <p>
+              Students' work stays on their own devices until they show a QR code or hand in a review file. A teacher's
+              class list stays on the teacher's device. Schools are responsible for their own rules about the files
+              students hand in.
             </p>
-          </div>
+          </Section>
 
-          {/* Section 6: Notification & Inactivity Favicon Privacy */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#E8B92D] text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-black">
-                Local Push Only
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                6. Notifications & Inactivity Mascots
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              Browser alerts and mascot dispatches are generated <strong>100% on-device</strong> using the browser's native Web Notifications API and Service Worker. Typo Hunter does not register device push tokens (FCM, APNs, or WebPush relays) with any server. On supported browsers (installed app, Chromium) reminders arrive through Periodic Background Sync, which the browser schedules; elsewhere they only appear inside the app. Inactivity timestamps and mascot states stay in your local browser storage.
+          <Section title="Keeping and deleting your data">
+            <p>
+              Your data stays until you delete it. Delete single finds in the app, or everything by clearing this
+              site's data in your browser settings.
             </p>
-          </div>
+            <p>
+              <strong>Clearing site data or losing your device deletes your collection permanently</strong> unless you
+              exported a backup. We can't recover it, because we never had it.
+            </p>
+          </Section>
 
-          {/* Section 7: Honest limits of checksums */}
-          <div className="bg-[#FFFDF9] p-4 rounded-xl border-2 border-black shadow-brutal-sm">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#82917B] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                Honest Limits
-              </span>
-              <h3 className="font-heading font-extrabold text-sm text-black">
-                7. Checksums Are Not Security
-              </h3>
-            </div>
-            <p className="text-gray-700">
-              Backup files include a SHA-256 checksum that catches accidental damage. It is not a security signature: a determined person can edit a file and fix the checksum. QR passes and scores work on the honour system. Teachers should grade by reviewing the photos students hand in, which the class review file makes possible. A random device ID is created on this device so classmates with the same name don't overwrite each other; it is only shared inside QR codes and files you choose to share.
+          <Section title="Backups and checksums">
+            <p>
+              Backup files include a checksum that catches accidental damage. It is not a security seal: a determined
+              person can edit a file. Scores shown in QR codes work on the honour system; teachers grade by reviewing
+              the photos students hand in.
             </p>
-          </div>
+          </Section>
+
+          <Section title="Questions or problems">
+            <p>
+              If something looks wrong, or you have a privacy question, report it on the project's GitHub page.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href={PROJECT_LINKS.reportProblem}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase"
+              >
+                Report a problem ↗
+              </a>
+              <a
+                href={PROJECT_LINKS.privacyPolicy}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase"
+              >
+                Full policy online ↗
+              </a>
+            </div>
+          </Section>
         </div>
 
         {/* Footer */}
-        <div className="pt-4 border-t border-black/10 flex justify-between items-center flex-shrink-0 mt-3">
-          <span className="text-[10px] text-gray-500 font-mono">Effective: Always & Forever</span>
+        <div className="pt-4 border-t border-black/10 flex justify-end items-center flex-shrink-0 mt-3">
           <button
             onClick={onClose}
             className="btn-primary py-2.5 px-6 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
           >
-            Understood
+            Got it
           </button>
         </div>
       </div>

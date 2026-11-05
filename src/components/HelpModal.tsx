@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { useDialogA11y } from '../hooks/useDialogA11y';
+import { PROJECT_LINKS } from '../utils/constants';
 import { IconClose, IconRefresh } from './Icons';
 
 interface HelpModalProps {
@@ -96,7 +97,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayT
           <div className="bg-[#FFF9EC] p-3.5 rounded-xl border-2 border-black shadow-brutal-sm">
             <div className="flex justify-between items-center mb-1">
               <h3 className="font-heading font-extrabold text-sm text-black uppercase tracking-wider">
-                5. Privacy & Zero Cookies
+                5. Privacy
               </h3>
               {onOpenPrivacy && (
                 <button
@@ -111,8 +112,26 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayT
               )}
             </div>
             <p className="text-gray-700">
-              Everything lives strictly on your device in IndexedDB. No cookies, no user accounts, no tracking scripts, no cloud image uploads.
+              Your collection lives only on this device. No accounts, no tracking cookies, no photo uploads. Nothing is shared unless you show a QR code or send a file.
             </p>
+          </div>
+
+          {/* Section 6: Report a problem */}
+          <div className="bg-white p-3.5 rounded-xl border-2 border-black shadow-brutal-sm">
+            <h3 className="font-heading font-extrabold text-sm text-black uppercase tracking-wider mb-1">
+              6. Something Wrong?
+            </h3>
+            <p className="text-gray-700 mb-2">
+              Found a bug, something confusing, or have an idea? Tell us on GitHub. Please don't include photos of people or private details.
+            </p>
+            <a
+              href={PROJECT_LINKS.reportProblem}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block btn-secondary py-1.5 px-3 rounded-lg text-[11px] font-bold uppercase"
+            >
+              Report a problem ↗
+            </a>
           </div>
         </div>
 
