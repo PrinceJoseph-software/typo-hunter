@@ -1,6 +1,6 @@
 /**
  * @file ocrService.ts
- * @description On-device text reading for sign photos (Tesseract.js, English).
+ * @description On-device text reading for sign photos (Tesseract.js, 9 languages).
  *
  * Everything runs on the phone. The engine, its WebAssembly core and the English
  * model are served from this site under /ocr/ (never a CDN), downloaded only the
@@ -13,7 +13,7 @@
  */
 
 import type { Worker as TesseractWorker } from 'tesseract.js';
-import { findMisspellings, suggestCorrection, FlaggedWord } from './spellcheck';
+import { findMisspellings, hasSpellcheck, suggestCorrection, FlaggedWord } from './spellcheck';
 
 export interface OCRResult {
   /** Cleaned text read from the photo (low-confidence noise removed). */
@@ -26,6 +26,38 @@ export interface OCRResult {
   /** Average recognition confidence 0–100 reported by the engine for the kept lines. */
   confidence: number;
   method: 'on-device-ocr';
+  language: OcrLanguage;
+  /** False when the language has no word list, so misspellings can't be flagged automatically. */
+  spellchecked: boolean;
+}
+
+/** Reading languages. Each model (1–2 MB) downloads from this site the first time it's used. */
+export const OCR_LANGUAGES = [
+  { code: 'eng', name: 'English' },
+  { code: 'fra', name: 'Français' },
+  { code: 'spa', name: 'Español' },
+  { code: 'por', name: 'Português' },
+  { code: 'deu', name: 'Deutsch' },
+  { code: 'ita', name: 'Italiano' },
+  { code: 'ara', name: 'العربية' },
+  { code: 'hin', name: 'हिन्दी' },
+  { code: 'chi_sim', name: '中文 (简体)' },
+] as const;
+
+export type OcrLanguage = (typeof OCR_LANGUAGES)[number]['code'];
+
+const LANG_STORAGE = 'typo_hunter_ocr_lang';
+const BROWSER_TO_OCR: Record<string, OcrLanguage> = { en: 'eng', fr: 'fra', es: 'spa', pt: 'por', de: 'deu', it: 'ita', ar: 'ara', hi: 'hin', zh: 'chi_sim' };
+
+/** The chosen reading language, or the browser's language when it's one we support. */
+export function getOcrLanguage(): OcrLanguage {
+  const saved = localStorage.getItem(LANG_STORAGE);
+  if (OCR_LANGUAGES.some(l => l.code === saved)) return saved as OcrLanguage;
+  return BROWSER_TO_OCR[(navigator.language || 'en').slice(0, 2).toLowerCase()] || 'eng';
+}
+
+export function setOcrLanguage(lang: OcrLanguage): void {
+  localStorage.setItem(LANG_STORAGE, lang);
 }
 
 export type OCRProgress = { stage: 'download' | 'reading'; progress: number };
@@ -36,13 +68,24 @@ export function isTextRecognitionSupported(): boolean {
 }
 
 let workerPromise: Promise<TesseractWorker> | null = null;
+let workerLanguage: OcrLanguage | null = null;
 let progressListener: ((p: OCRProgress) => void) | null = null;
 
-async function getWorker(): Promise<TesseractWorker> {
+async function getWorker(lang: OcrLanguage): Promise<TesseractWorker> {
+  if (workerPromise && workerLanguage !== lang) {
+    // Same engine, different language model.
+    const worker = await workerPromise;
+    const { OEM, PSM } = await import('tesseract.js');
+    await worker.reinitialize(lang, OEM.LSTM_ONLY);
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, user_defined_dpi: '300' });
+    workerLanguage = lang;
+    return worker;
+  }
   if (!workerPromise) {
+    workerLanguage = lang;
     workerPromise = (async () => {
       const { createWorker, OEM, PSM } = await import('tesseract.js');
-      const worker = await createWorker('eng', OEM.LSTM_ONLY, {
+      const worker = await createWorker(lang, OEM.LSTM_ONLY, {
         workerPath: '/ocr/worker.min.js',
         corePath: '/ocr/',
         langPath: '/ocr/',
@@ -62,6 +105,7 @@ async function getWorker(): Promise<TesseractWorker> {
       return worker;
     })().catch(err => {
       workerPromise = null;
+      workerLanguage = null;
       throw err;
     });
   }
@@ -93,7 +137,10 @@ async function prepareImage(input: File | Blob | string): Promise<HTMLCanvasElem
 }
 
 /** Keeps words the engine is reasonably sure about and that look like real text. */
-function cleanLines(blocks: Array<{ paragraphs: Array<{ lines: Array<{ words: Array<{ text: string; confidence: number }> }> }> }> | null): {
+function cleanLines(
+  blocks: Array<{ paragraphs: Array<{ lines: Array<{ words: Array<{ text: string; confidence: number }> }> }> }> | null,
+  joiner: string
+): {
   lines: string[];
   confidence: number;
 } {
@@ -103,10 +150,10 @@ function cleanLines(blocks: Array<{ paragraphs: Array<{ lines: Array<{ words: Ar
     for (const para of block.paragraphs || []) {
       for (const line of para.lines || []) {
         const words = (line.words || []).filter(
-          w => w.confidence >= 55 && /[A-Za-z0-9]/.test(w.text) && !/^[^A-Za-z0-9]+$/.test(w.text)
+          w => w.confidence >= 55 && /[\p{L}\p{N}]/u.test(w.text)
         );
         if (words.length === 0) continue;
-        lines.push(words.map(w => w.text).join(' '));
+        lines.push(words.map(w => w.text).join(joiner));
         confidences.push(...words.map(w => w.confidence));
       }
     }
@@ -121,16 +168,19 @@ function cleanLines(blocks: Array<{ paragraphs: Array<{ lines: Array<{ words: Ar
  */
 export async function runOfflineOCR(
   imageInput: File | Blob | string,
-  onProgress?: (p: OCRProgress) => void
+  onProgress?: (p: OCRProgress) => void,
+  language: OcrLanguage = getOcrLanguage()
 ): Promise<OCRResult | null> {
   if (!isTextRecognitionSupported()) return null;
   progressListener = onProgress || null;
   try {
-    const [worker, image] = await Promise.all([getWorker(), prepareImage(imageInput)]);
+    const [worker, image] = await Promise.all([getWorker(language), prepareImage(imageInput)]);
     const { data } = await worker.recognize(image, {}, { text: true, blocks: true });
-    const { lines, confidence } = cleanLines(data.blocks as never);
+    // Chinese is written without spaces between words.
+    const { lines, confidence } = cleanLines(data.blocks as never, language === 'chi_sim' ? '' : ' ');
     const detectedText = lines.join(' ').replace(/\s+/g, ' ').trim();
-    const flagged = detectedText ? await findMisspellings(detectedText).catch(() => []) : [];
+    const spellchecked = hasSpellcheck(language);
+    const flagged = detectedText && spellchecked ? await findMisspellings(detectedText, language).catch(() => []) : [];
     const correction = flagged.length ? suggestCorrection(detectedText, flagged) : undefined;
     return {
       detectedText,
@@ -139,6 +189,8 @@ export async function runOfflineOCR(
       suggestedCorrection: correction && correction !== detectedText ? correction : undefined,
       confidence,
       method: 'on-device-ocr',
+      language,
+      spellchecked,
     };
   } catch (e) {
     console.warn('[OCR] Text reading failed', e);
@@ -148,7 +200,7 @@ export async function runOfflineOCR(
   }
 }
 
-const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normalise = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /**
  * True when the wording the user saved matches what the app read from the photo
