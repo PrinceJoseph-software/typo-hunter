@@ -75,6 +75,16 @@ Suitable for literacy, spelling, ESL / EFL, media studies, and field trips.
 - Language learners: spotting why something is wrong teaches what's right.
 - Travellers collecting memorable translations.
 
+## Public typo feed (optional)
+
+- When saving a find, the user can tick "Let everyone see it?" to share it publicly. Only text is shared: what it said, what they meant, the category, the city, the "Read by app" label, and optionally a public nickname. Photos and exact locations are never shared.
+- Public pages: the front page lists recent posts and top cities; each city has a page at /city/<city>-<country-code> (for example /city/lagos-ng or /city/london-gb).
+- City is chosen by typing it or with "Use my location", which is matched to a city on the phone.
+- No account. Posting is anonymous unless the user claims a unique public nickname; look-alike spellings of an existing nickname are refused to prevent impersonation.
+- Limits: 3 posts on a phone's first day, then 10 a day. Posting requires confirming age 13+ and is off during class hunts.
+- Anyone can flag a post. Posts flagged by 3 different people are hidden until a moderator reviews them.
+- Posts wait on the phone when offline and send when the connection returns.
+
 ## Offline, installing and backups
 
 - After the first online visit, everything works offline: capturing, browsing, QR games and class hunts.
@@ -103,7 +113,7 @@ Full policy: https://typo-hunter-topaz.vercel.app/privacy.html
 - Why didn't a gallery photo count in Speed Blitz or a class hunt? Only photos taken during the round or class count.
 - Do ratings or Legends give points? No.
 - Does it work without internet? Yes, after the first visit.
-- How is text read from photos? On the device with Tesseract (English). The reader (~7 MB) downloads once from the app's own site, then works offline; photos are never uploaded. Real-word mistakes ("Soap of the Day") and grammar can't be detected automatically.
+- How is text read from photos? On the device with Tesseract, in English, French, Spanish, Portuguese, German, Italian, Arabic, Hindi or Chinese (spelling is checked in English, French and Spanish). The reader (~7 MB) downloads once from the app's own site, then works offline; photos are never uploaded. Real-word mistakes ("Soap of the Day") and grammar can't be detected automatically.
 
 ## Project
 

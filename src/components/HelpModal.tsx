@@ -64,11 +64,19 @@ const FAQ: Array<{ q: string; a: React.ReactNode }> = [
   },
   {
     q: 'How does the app read the text on my photo?',
-    a: "It reads it on your phone, so your photo never leaves it. The first time, it downloads the reader (about 7 MB) from this app's own site; after that it works offline. It highlights words that look misspelt and suggests fixes. Mistakes that are real words (like \"Soap of the Day\") or grammar slips can't be spotted automatically, so you add those yourself. If a photo is blurry or at an angle, tap Read Again or type the wording.",
+    a: "It reads it on your phone, so your photo never leaves it. Choose the sign's language under the photo: English, French, Spanish, Portuguese, German, Italian, Arabic, Hindi or Chinese. Spelling is checked in English, French and Spanish; the others are read only. The first time, it downloads the reader (a few MB per language) from this app's own site; after that it works offline. It highlights words that look misspelt and suggests fixes. Mistakes that are real words (like \"Soap of the Day\") or grammar slips can't be spotted automatically, so you add those yourself. If a photo is blurry or at an angle, tap Read Again or type the wording.",
   },
   {
     q: 'What does "Read by app" mean?',
     a: "The wording you saved matches what the app read from your photo, on your phone. It's a helpful sign that the find is real, but it isn't proof, since anything on a phone can be changed.",
+  },
+  {
+    q: 'Someone took the nickname I wanted. Why can\'t I use a similar one?',
+    a: 'To stop impersonation, names that look alike count as the same name: "PrinceJoe", "Prince_Joe" and "Pr1nceJ0e" can only belong to one person. Pick something clearly different.',
+  },
+  {
+    q: 'My public post disappeared. What happened?',
+    a: "Posts flagged by several people are hidden until they're reviewed. If it was fine, it comes back. Posts with personal details, offensive words or that aren't typos are removed, and repeated removals stop a phone from posting.",
   },
   {
     q: 'Two students in my class have the same name. Is that a problem?',
@@ -172,6 +180,21 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onReplayT
               </li>
             </ul>
             <p>Scores in QR codes work on the honour system: if it really matters, ask to see the photos.</p>
+          </Card>
+
+          <Card title="Share with everyone (optional)" accent="text-[#82917B]">
+            <p>
+              When you save a find, tick <strong>Let everyone see it?</strong> (or open a find later and tap{' '}
+              <em>Share publicly</em>). Only the words, the category and your <strong>city</strong> are shared. Never the
+              photo or your exact location.
+            </p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Pick your city by typing it, or tap <em>Use my location</em> (worked out on your phone).</li>
+              <li>Posts are anonymous unless you claim a <strong>public nickname</strong> in your Curator Profile and choose to show it. Nicknames are unique, look-alikes included.</li>
+              <li>No signal? The post waits and sends itself when you're back online.</li>
+              <li>You can share up to 10 a day (3 on your first day). Remove a post any time from the find's page.</li>
+              <li>See what others spotted on the front page, or on your city's page. Tap <em>Flag</em> on anything that shouldn't be there.</li>
+            </ul>
           </Card>
 
           <Card title="5. Class hunts" accent="text-[#D66A4A]">

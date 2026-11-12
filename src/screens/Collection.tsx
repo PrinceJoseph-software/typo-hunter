@@ -229,6 +229,11 @@ export const Collection: React.FC<CollectionProps> = ({
                     <span className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-0.5 truncate">
                       <span className="truncate">{item.category}</span>
                       {item.readByApp && <ReadByAppBadge compact />}
+                      {item.publicPost && (
+                        <span className={`text-[10px] font-mono font-bold px-1 rounded border ${item.publicPost.status === 'posted' ? 'border-black bg-[#E8B92D] text-black' : item.publicPost.status === 'queued' ? 'border-gray-500 text-gray-600' : 'border-[#D66A4A] text-[#D66A4A]'}`}>
+                          {item.publicPost.status === 'posted' ? 'Public' : item.publicPost.status === 'queued' ? 'Sending…' : 'Not shared'}
+                        </span>
+                      )}
                     </span>
                     <h3 className="font-heading font-extrabold text-sm sm:text-base text-black mb-1 line-clamp-2 leading-snug group-hover:text-[#D66A4A] transition-colors">
                       {item.title}

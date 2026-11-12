@@ -85,17 +85,27 @@ Run the same core checks locally before opening a pull request:
 
 ```bash
 pnpm exec tsc --noEmit   # type check
+pnpm test                # server tests
 pnpm build               # type check + production build
 ```
 
-There are no unit or end-to-end tests yet.
+**Server tests** (`pnpm test`, Vitest) run the real request handler against an in-memory Postgres: posting, limits, nicknames and look-alikes, flags, admin review and city pages. There are no automated browser tests in the repository yet.
 
 ## Pages and text reading
 
 - `/` is a static front page (`public/index.html`, styles in `src/landing/landing.css`, a tiny script in `src/landing/landing.ts`). The installed app skips it and opens `/app/`.
 - `/app/` is the React app (`public/app/index.html` → `src/main.tsx`). `vercel.json` rewrites `/app/*` to it.
-- **Text reading** (`src/utils/ocrService.ts`) runs Tesseract.js on the device. The build copies the engine (`worker.min.js`, the LSTM WebAssembly cores) and word lists into `/ocr/`; the English model lives in `public/ocr/eng.traineddata.gz`. Nothing loads from a CDN. The service worker caches `/ocr/*` on first use (not on install), and the CSP allows WebAssembly via `'wasm-unsafe-eval'`.
+- **Text reading** (`src/utils/ocrService.ts`) runs Tesseract.js on the device, in 9 languages (models in `public/ocr/<lang>.traineddata.gz`, fetched when a language is first used). Spell-check word lists exist for English, French and Spanish. The build copies the engine (`worker.min.js`, the LSTM WebAssembly cores) and word lists into `/ocr/`; the English model lives in `public/ocr/eng.traineddata.gz`. Nothing loads from a CDN. The service worker caches `/ocr/*` on first use (not on install), and the CSP allows WebAssembly via `'wasm-unsafe-eval'`.
 - **Spell check** (`src/utils/spellcheck.ts`) flags words missing from a 275k-word list and ranks suggestions by SCOWL frequency levels.
+
+## Public feed server
+
+- `server/` holds the server code: `app.ts` (every `/api/*` route and the `/city/<slug>` pages), `validate.ts` (text and nickname rules, also used by the app), `db.ts` (Neon driver and automatic table creation), `cities.ts`, `cityPage.ts`.
+- `server/vercel.ts` is the Vercel entry point. **`pnpm build:api` bundles it into `api/index.js`, which is committed**, so Vercel deploys one self-contained function. `pnpm build` runs it for you, and CI fails if the committed file is out of date. Don't edit `api/index.js` by hand.
+- `vercel.json` rewrites `/api/*` and `/city/*` to that one function (the original path arrives as `__path`).
+- Locally, `pnpm dev` and `pnpm preview` run the same API against an in-memory Postgres (PGlite), so everything works without a database. Data is lost when the server stops. The local admin secret is `local-admin-secret-0000`.
+- `server/data/cities.json` (cities with 15,000+ people, GeoNames, CC BY 4.0) is regenerated with `node scripts/build-cities.mjs`. The app downloads the same list as `/geo/cities.json` to find the user's city on the phone.
+- Setup on Vercel: [`PUBLIC_FEED_SETUP.md`](PUBLIC_FEED_SETUP.md).
 
 ## Search, sharing and AI-readable files
 

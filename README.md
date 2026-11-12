@@ -42,6 +42,9 @@ A field activity for literacy, spelling, ESL or media studies:
 - At the end, students hand in their photos and the teacher **reviews each one** and approves or rejects it. Grades come from the real photos, not a number anyone could make up.
 - The class can split into squads for a friendly competition, and results export as a spreadsheet.
 
+### Everyone in your city
+Choose to share a find and it joins your city's public typo feed, for example *Typos spotted in Lagos*. Only the words are shared, never the photo or your exact location. You can post anonymously or under a unique nickname, and anyone can flag a post that shouldn't be there.
+
 ### Language learners
 Spotting *why* something is wrong is a great way to learn what's right. Writing "what it said" next to "what they meant" turns every mistake you find into a small lesson.
 

@@ -115,6 +115,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (!url.protocol.startsWith('http')) return;
 
+  // Live data (public feed, city pages, admin) always comes from the network, never the cache.
+  if (url.origin === self.location.origin && (url.pathname === '/api' || /^\/(api|city|admin)\//.test(url.pathname))) return;
   // Leave third-party requests alone (the app itself makes none).
   if (url.origin !== self.location.origin) return;
 
@@ -122,7 +124,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstNavigation(request));
     return;
   }
-  if (url.pathname.startsWith('/ocr/')) {
+  if (url.pathname.startsWith('/ocr/') || url.pathname.startsWith('/geo/')) {
     event.respondWith(cacheFirst(request, OCR_CACHE));
     return;
   }

@@ -41,4 +41,4 @@ export const PROJECT_LINKS = {
 } as const;
 
 /** Date of the current privacy policy (keep in sync with PRIVACY.md). */
-export const PRIVACY_POLICY_EFFECTIVE_DATE = '5 November 2026';
+export const PRIVACY_POLICY_EFFECTIVE_DATE = '12 November 2026';

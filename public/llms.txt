@@ -6,7 +6,8 @@ Key facts:
 
 - Website: https://typo-hunter-topaz.vercel.app/ (front page)
 - App: https://typo-hunter-topaz.vercel.app/app/ (installable Progressive Web App; works offline after the first visit)
-- Reads the text in photos on the device (no upload) and flags misspelt words
+- Reads the text in photos on the device (no upload) in 9 languages and flags misspelt words (English, French, Spanish)
+- Optional public feed: users can share a find's words (never the photo) by city; browse at /city/<city>-<country-code>, for example /city/lagos-ng
 - Price: free. Licence: MIT (open source)
 - Accounts: none. Photos and notes are stored only in the browser on the user's device; the app contacts no third parties.
 - Language of the interface: English

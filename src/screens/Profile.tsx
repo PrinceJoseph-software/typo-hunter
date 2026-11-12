@@ -35,6 +35,7 @@ import { calculateSpecimenScore } from '../utils/proofOfSighting';
 import { useHunterPoints } from '../hooks/useHunterPoints';
 import { pointsLedger } from '../utils/pointsLedger';
 import { NotificationSettingsCard } from '../components/NotificationSettingsCard';
+import { PublicNicknameCard } from '../components/PublicNicknameCard';
 
 interface ProfileProps {
   discoveries: Discovery[];
@@ -575,6 +576,8 @@ export const Profile: React.FC<ProfileProps> = ({
       </div>
 
       {/* Reminder settings (the mascot favicon itself is automatic) */}
+      <PublicNicknameCard />
+
       <NotificationSettingsCard />
 
       {/* Backup & restore */}

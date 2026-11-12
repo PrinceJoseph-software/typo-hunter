@@ -5,6 +5,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { buildPrivacyPage } from './scripts/privacy-page';
+import { handle } from './server/app';
 
 const require = createRequire(import.meta.url);
 
@@ -42,6 +43,9 @@ function typoHunterOcrAssets(): Plugin {
     'tesseract-core-simd-lstm.wasm.js': () => readFileSync(join(coreDir, 'tesseract-core-simd-lstm.wasm.js')),
     'tesseract-core-relaxedsimd-lstm.wasm.js': () => readFileSync(join(coreDir, 'tesseract-core-relaxedsimd-lstm.wasm.js')),
     'words.txt': () => (require('an-array-of-english-words') as string[]).join('\n'),
+    // Spell-check lists for other languages (MIT). Loaded only when that language is chosen.
+    'words-fra.txt': () => (require('an-array-of-french-words') as string[]).join('\n'),
+    'words-spa.txt': () => (require('an-array-of-spanish-words') as string[]).join('\n'),
     // SCOWL lists by how common words are ("#1" = most common), used to rank spelling suggestions.
     'common.txt': () => {
       const lists = require('wordlist-english') as Record<string, string[]>;
@@ -70,6 +74,75 @@ function typoHunterOcrAssets(): Plugin {
   };
 }
 
+/** City list for the on-device "which city am I in?" lookup (same data the server validates against). */
+function typoHunterGeoData(): Plugin {
+  const read = () => readFileSync(resolve(__dirname, 'server/data/cities.json'));
+  return {
+    name: 'typo-hunter-geo-data',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'geo/cities.json', source: read() });
+    },
+    configureServer(server) {
+      server.middlewares.use('/geo/cities.json', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(read());
+      });
+    },
+  };
+}
+
+/**
+ * Runs the public-feed API locally (`pnpm dev` / `pnpm preview`) with an in-memory
+ * Postgres (PGlite), so the whole app can be tried without a Neon database.
+ * Data is lost when the server stops. Production uses api/index.ts on Vercel.
+ */
+function typoHunterLocalApi(): Plugin {
+  type Middlewares = { use: (fn: (req: any, res: any, next: () => void) => void) => void };
+  let dbPromise: Promise<{ query: <T>(text: string, params?: unknown[]) => Promise<T[]> }> | null = null;
+  const getDb = () => {
+    if (!dbPromise) {
+      dbPromise = import('@electric-sql/pglite').then(({ PGlite }) => {
+        const pg = new PGlite();
+        return { query: async <T>(text: string, params: unknown[] = []) => (await pg.query(text, params)).rows as T[] };
+      });
+    }
+    return dbPromise;
+  };
+  const install = (middlewares: Middlewares) => {
+    middlewares.use(async (req, res, next) => {
+      const path = String(req.url || '').split('?')[0];
+      if (path !== '/api' && !path.startsWith('/api/') && !path.startsWith('/city/')) return next();
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const headers = new Headers();
+        for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);
+        const hasBody = !['GET', 'HEAD'].includes(req.method);
+        const request = new Request(`http://${req.headers.host}${req.url}`, {
+          method: req.method,
+          headers,
+          body: hasBody ? Buffer.concat(chunks) : undefined,
+        });
+        const response = await handle(request, await getDb(), {
+          ADMIN_SECRET: process.env.ADMIN_SECRET || 'local-admin-secret-0000',
+          BLOCKED_WORDS: process.env.BLOCKED_WORDS,
+        });
+        res.statusCode = response.status;
+        response.headers.forEach((value, key) => res.setHeader(key, value));
+        res.end(Buffer.from(await response.arrayBuffer()));
+      } catch (err) {
+        res.statusCode = 500;
+        res.end(String(err));
+      }
+    });
+  };
+  return {
+    name: 'typo-hunter-local-api',
+    configureServer: server => install(server.middlewares as Middlewares),
+    configurePreviewServer: server => install(server.middlewares as Middlewares),
+  };
+}
+
 /**
  * After the build, writes the full list of output files and a content-based
  * version into dist/sw.js, so the service worker precaches the real hashed
@@ -93,7 +166,7 @@ function typoHunterPrecache(): Plugin {
       // OCR engine files are large and only needed by people who use text reading:
       // the service worker caches them on first use instead of on install.
       const assets = files
-        .filter(f => f !== '/sw.js' && !f.endsWith('.map') && !f.startsWith('/ocr/') && !/^\/google[0-9a-f]+\.html$/.test(f))
+        .filter(f => f !== '/sw.js' && !f.endsWith('.map') && !f.startsWith('/ocr/') && !f.startsWith('/geo/') && !f.startsWith('/admin/') && !/^\/google[0-9a-f]+\.html$/.test(f))
         .sort();
 
       const hash = createHash('sha256');
@@ -115,7 +188,7 @@ function typoHunterPrecache(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), typoHunterPrivacyPage(), typoHunterOcrAssets(), typoHunterPrecache()],
+  plugins: [react(), typoHunterPrivacyPage(), typoHunterOcrAssets(), typoHunterGeoData(), typoHunterLocalApi(), typoHunterPrecache()],
   // index.html lives in public/; publicDir holds static assets like manifest.json, sw.js, icons
   root: 'public',
   publicDir: '../public',
@@ -127,6 +200,12 @@ export default defineConfig({
       input: {
         landing: resolve(__dirname, 'public/index.html'),
         app: resolve(__dirname, 'public/app/index.html'),
+        admin: resolve(__dirname, 'public/admin/index.html'),
+        // Script for the server-rendered /city/<slug> pages; needs a fixed name they can link to.
+        'city-feed': resolve(__dirname, 'src/feed/cityFeed.ts'),
+      },
+      output: {
+        entryFileNames: chunk => (chunk.name === 'city-feed' ? 'city-feed.js' : 'assets/[name]-[hash].js'),
       },
     },
   },

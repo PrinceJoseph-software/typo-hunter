@@ -36,6 +36,7 @@ import { PvpArenaModal } from './components/PvpArenaModal';
 import { TeacherModeModal } from './components/TeacherModeModal';
 import { teacherService, ClassExpedition } from './utils/teacherService';
 import { pointsLedger } from './utils/pointsLedger';
+import { publicApi } from './utils/publicApi';
 
 export function App() {
   const [currentView, setCurrentView] = useState<string>('home');
@@ -257,6 +258,15 @@ export function App() {
     // Reminders are delivered by the service worker in the background (see notificationService);
     // checking here would only ever fire while the user is already in the app.
     syncReminderSchedule();
+
+    // Send any public posts that were queued while offline.
+    const flush = async () => {
+      const items = await dbService.getAllDiscoveries();
+      if ((await publicApi.flushQueue(items)) > 0) loadDiscoveries();
+    };
+    void flush();
+    window.addEventListener('online', flush);
+    return () => window.removeEventListener('online', flush);
   }, []);
 
   const navigateTo = (view: string, param?: string) => {

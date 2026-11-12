@@ -105,6 +105,7 @@
         </a>
         <nav aria-label="Main">
           <a href="#how">How it works</a>
+          <a href="#typos">Typos near you</a>
           <a href="#who">Who it's for</a>
           <a href="#privacy">Privacy</a>
         </nav>
@@ -202,17 +203,20 @@
         </div>
       </section>
 
-      <!-- Coming soon -->
-      <section class="section">
-        <div class="wrap soon">
-          <div>
-            <p class="kicker">Coming soon</p>
-            <h2>The typo map</h2>
-            <p>
-              Choose to share a find, and everyone will be able to see the typos spotted in your city. Only the words and
-              the city are shared, never your photo or exact location, and anyone can flag a post that shouldn't be there.
-            </p>
-          </div>
+      <!-- Public typo feed -->
+      <section id="typos" class="section">
+        <div class="wrap">
+          <p class="kicker">Spotted by hunters</p>
+          <h2>Typos near you</h2>
+          <p class="feed-intro">
+            Hunters can choose to share a find. Only the words and the city are public, never the photo or an exact
+            location, and anyone can flag a post that shouldn't be there.
+          </p>
+          <div id="city-list" class="city-list" hidden></div>
+          <div id="recent" class="recent" hidden></div>
+          <p id="feed-empty" class="feed-empty">
+            No public typos yet. <a href="/app/">Open the app</a>, spot one, and tick <strong>"Let everyone see it?"</strong> to be the first.
+          </p>
         </div>
       </section>
 
@@ -224,7 +228,7 @@
             <li><strong>No account.</strong> Open it and start hunting.</li>
             <li><strong>Your photos stay on your phone.</strong> Text reading happens on the device, too.</li>
             <li><strong>No tracking.</strong> No ads, no analytics, and the app contacts no third parties.</li>
-            <li><strong>You decide what to share.</strong> Nothing leaves your phone unless you show a QR code or send a file.</li>
+            <li><strong>You decide what to share.</strong> Nothing leaves your phone unless you show a QR code, send a file, or choose to post a find's words publicly.</li>
           </ul>
           <p><a href="/privacy.html">Read the privacy policy</a></p>
         </div>

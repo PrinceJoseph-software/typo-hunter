@@ -4,7 +4,7 @@ This describes what the code does now (verified against the source after the F-0
 
 ## Runtime overview
 
-Typo Hunter is a static single-page React app. There is no server component.
+Typo Hunter is a static site (front page + React app) that works fully offline. One optional server piece, the public typo feed, runs as a single Vercel Function with a Postgres database; see `PUBLIC_FEED_SETUP.md` and `PHASE2_PUBLIC_POSTS.md`. Nothing else talks to a server.
 
 | Concern | Implementation | File |
 |---|---|---|
@@ -55,6 +55,10 @@ interface Discovery {
   sourceHunter?: string;    // who an imported entry came from
   ocrText?: string;         // text the on-device reader found (≤500)
   readByApp?: boolean;      // saved wording matches ocrText ("Read by app" badge; not proof)
+  publicPost?: {            // set only if the owner shared the words publicly
+    status: 'queued' | 'posted' | 'failed'; id?: string; cityId: number; cityName: string;
+    citySlug?: string; showName: boolean; error?: string; at: string;
+  };
 }
 ```
 
@@ -84,7 +88,10 @@ Imported entries and duplicate photos score 0. Star ratings and Hall of Fame sta
 
 | Key | Contents |
 |---|---|
-| `typo_hunter_device_id` | Random install id |
+| `typo_hunter_device_id` | Random install id (QR games and classes) |
+| `typo_hunter_public_key` | Random key for public posts; the server only ever stores its hash |
+| `typo_hunter_public_city`, `typo_hunter_public_age13`, `typo_hunter_public_nickname` | Remembered city, 13+ confirmation, cached public nickname |
+| `typo_hunter_ocr_lang` | Chosen text-reading language |
 | `typo_hunter_nickname` | Display name (default `Hunter`; a real name is required to join a class) |
 | `typo_hunter_onboarded` | Onboarding seen flag |
 | `typo_hunter_team` | Selected squad id |
