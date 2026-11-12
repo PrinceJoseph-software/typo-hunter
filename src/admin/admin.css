@@ -1,0 +1,12 @@
+.admin { padding-top: 32px; padding-bottom: 64px; max-width: 760px; }
+.admin label { font-weight: 700; display: block; margin-bottom: 6px; }
+.admin .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.admin input { flex: 1; min-width: 200px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; font: inherit; }
+.admin .hint { color: var(--muted); font-size: 0.9rem; }
+.admin .post { background: var(--card); border: 2px solid var(--line); border-radius: 16px; box-shadow: 4px 4px 0 var(--line); padding: 16px; margin: 0 0 16px; }
+.admin .said, .admin .meant { font-family: 'Courier Prime', monospace; font-weight: 700; margin: 0 0 6px; overflow-wrap: anywhere; }
+.admin .meant { color: var(--sage); }
+.admin .label { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.admin .actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.admin .danger { background: var(--brick); color: #fff; }
+#status { font-weight: 700; }

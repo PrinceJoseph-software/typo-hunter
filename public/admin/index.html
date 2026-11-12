@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Review flagged posts · Typo Hunter</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="../../src/landing/landing.css" />
+    <link rel="stylesheet" href="../../src/admin/admin.css" />
+  </head>
+  <body>
+    <main class="wrap admin">
+      <h1>Review flagged posts</h1>
+      <form id="login">
+        <label for="secret">Admin secret</label>
+        <div class="row">
+          <input id="secret" type="password" autocomplete="current-password" required />
+          <button class="btn btn-yellow" type="submit">Open review queue</button>
+        </div>
+        <p class="hint">The secret you set as <code>ADMIN_SECRET</code> in Vercel. It's kept only for this browser tab.</p>
+      </form>
+      <p id="status" role="status"></p>
+      <section id="queue" hidden>
+        <p id="totals" class="hint"></p>
+        <div id="list"></div>
+        <p><button class="btn btn-light" id="refresh" type="button">Refresh</button> <button class="btn btn-light" id="logout" type="button">Lock</button></p>
+      </section>
+    </main>
+    <script type="module" src="../../src/admin/admin.ts"></script>
+  </body>
+</html>

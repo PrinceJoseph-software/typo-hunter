@@ -69,7 +69,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
               <li>No accounts, no sign-up, no passwords.</li>
               <li>No analytics, no advertising, no tracking cookies.</li>
               <li>Your photos, notes and scores are stored only in this browser on this device.</li>
-              <li>Nothing is shared unless <strong>you</strong> show a QR code or send a file.</li>
+              <li>Nothing is shared unless <strong>you</strong> show a QR code, send a file, or choose to post a find's words publicly.</li>
             </ul>
           </Section>
 
@@ -82,7 +82,9 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
             </p>
             <p>None of this is sent to us or to any server we run. We have no copy of it.</p>
             <p>
-              Typo Hunter never reads your GPS location. The location field is text you type yourself.
+              The location field on a find is text you type yourself. The app only asks for your device's location if
+              you tap "Use my location" when choosing a city for a public post; your position is matched to a city on
+              your phone and is never sent anywhere.
             </p>
           </Section>
 
@@ -108,8 +110,27 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) =
             </ol>
             <p>
               <strong>No third parties.</strong> Everything the app needs, including its fonts, comes from the app's
-              own site. It makes no requests to Google, advertisers, analytics services or anyone else, and works
-              offline once opened.
+              own site. It makes no requests to Google, advertisers, analytics services or anyone else. Public posts go
+              only to this app's own server, and everything else works offline once opened.
+            </p>
+          </Section>
+
+          <Section title="Public posts (optional)" badge="Your choice">
+            <p>
+              You can share a find on the public feed, one find at a time. <strong>Public:</strong> what it said, what
+              they meant, the category, the city you pick, "Read by app", the date, and your public nickname if you
+              choose to show it. <strong>Never sent:</strong> your photo, exact location, notes or private display name.
+            </p>
+            <p>
+              Our own server stores the post, a scrambled copy of a random key from your phone (so you can delete your
+              posts and so limits work; it isn't an account), your public nickname if you claim one, and flags. A
+              scrambled, daily-changing code from your network address limits posts per network; the address itself
+              isn't stored. The site is hosted on Vercel and the database on Neon.
+            </p>
+            <p>
+              Remove a public post any time from the find's page. Don't post personal details. Anyone can flag a post,
+              and posts flagged by several people are hidden until reviewed. You must be 13 or older to post, and
+              posting is off during class hunts.
             </p>
           </Section>
 

@@ -20,6 +20,7 @@ import { generateProofOfSighting } from '../utils/proofOfSighting';
 import { pointsLedger } from '../utils/pointsLedger';
 import { useDiscoveryImage } from '../hooks/useDiscoveryImage';
 import { ReadByAppBadge } from '../components/ReadByAppBadge';
+import { SharePublicly } from '../components/SharePublicly';
 import { IconHeart, IconTrophy, IconStar, IconArrowLeft, IconChevronDown } from '../components/Icons';
 
 interface DetailProps {
@@ -309,6 +310,8 @@ export const Detail: React.FC<DetailProps> = ({ discovery, onBack, onUpdate, onD
             </p>
             <p className="text-[10px] text-gray-400">Record ID: <code>{proof.verificationHash}</code></p>
           </div>
+
+          <SharePublicly discovery={discovery} onChanged={onUpdate} />
 
           {actionError && (
             <div className="bg-[#D66A4A] text-white p-2.5 rounded-xl text-xs font-bold font-mono border-2 border-black" role="alert">

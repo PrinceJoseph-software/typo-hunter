@@ -5,6 +5,18 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "/api?__path=:path*"
+    },
+    {
+      "source": "/city/:slug",
+      "destination": "/api?__path=city/:slug"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin/index.html"
+    },
+    {
       "source": "/app",
       "destination": "/app/index.html"
     },
@@ -31,7 +43,7 @@
         },
         {
           "key": "Permissions-Policy",
-          "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"
+          "value": "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
         },
         {
           "key": "X-Frame-Options",
@@ -93,6 +105,15 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
         }
       ]
     }

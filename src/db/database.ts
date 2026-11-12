@@ -68,6 +68,37 @@ export interface Discovery {
   ocrText?: string;
   /** "Read by app": the saved wording matches text the app read from the photo on the device. Not proof. */
   readByApp?: boolean;
+  /** Set when the owner chose to share this find's words publicly (never the photo). */
+  publicPost?: PublicPostState;
+}
+
+export interface PublicPostState {
+  /** queued = waiting for a connection; posted = live; failed = the server refused it (see error). */
+  status: 'queued' | 'posted' | 'failed';
+  /** Server id once posted. */
+  id?: string;
+  cityId: number;
+  cityName: string;
+  citySlug?: string;
+  showName: boolean;
+  error?: string;
+  at: string;
+}
+
+function validatePublicPost(input: unknown): PublicPostState | undefined {
+  const p = input as Partial<PublicPostState> | undefined;
+  if (!p || typeof p !== 'object' || !['queued', 'posted', 'failed'].includes(String(p.status))) return undefined;
+  if (!Number.isInteger(p.cityId) || typeof p.cityName !== 'string') return undefined;
+  return {
+    status: p.status as PublicPostState['status'],
+    id: typeof p.id === 'string' ? p.id.slice(0, 40) : undefined,
+    cityId: p.cityId as number,
+    cityName: p.cityName.slice(0, 80),
+    citySlug: typeof p.citySlug === 'string' ? p.citySlug.slice(0, 100) : undefined,
+    showName: p.showName === true,
+    error: typeof p.error === 'string' ? p.error.slice(0, 200) : undefined,
+    at: typeof p.at === 'string' ? p.at : new Date().toISOString(),
+  };
 }
 
 /**
@@ -234,6 +265,7 @@ export function validateDiscovery(input: unknown): Discovery {
     sourceHunter: typeof d.sourceHunter === 'string' ? d.sourceHunter.trim().slice(0, 40) : undefined,
     ocrText: typeof d.ocrText === 'string' && d.ocrText.trim() ? d.ocrText.trim().slice(0, 500) : undefined,
     readByApp: d.readByApp === true ? true : undefined,
+    publicPost: validatePublicPost(d.publicPost),
   };
 }
 

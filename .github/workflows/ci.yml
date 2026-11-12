@@ -38,8 +38,18 @@ jobs:
       - name: Type check
         run: pnpm exec tsc --noEmit
 
+      - name: Server tests
+        run: pnpm test
+
       - name: Production build
         run: pnpm build
+
+      - name: Committed API bundle is up to date
+        run: |
+          if ! git diff --quiet -- api/index.js; then
+            echo "::error file=api/index.js::api/index.js is out of date. Run 'pnpm build:api' and commit the result."
+            exit 1
+          fi
 
       - name: Offline cache includes the built files
         run: |

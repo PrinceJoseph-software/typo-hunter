@@ -16,8 +16,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CATEGORIES } from '../utils/constants';
 import { compressImage } from '../utils/imageUtils';
 import { dbService, Discovery } from '../db/database';
-import { runOfflineOCR, OCRResult, OCRProgress, isTextRecognitionSupported, wordingMatchesOcr } from '../utils/ocrService';
+import { runOfflineOCR, OCRResult, OCRProgress, OCR_LANGUAGES, OcrLanguage, getOcrLanguage, setOcrLanguage, isTextRecognitionSupported, wordingMatchesOcr } from '../utils/ocrService';
 import { matchCase } from '../utils/spellcheck';
+import { publicApi, ShareChoice } from '../utils/publicApi';
+import { emptyShareChoice, PublicShareFields } from '../components/PublicShareFields';
+import { textProblem } from '../../server/validate';
 import { pointsLedger } from '../utils/pointsLedger';
 import { calculateSpecimenScore } from '../utils/proofOfSighting';
 import { recordCaptureActivity } from '../utils/dynamicFavicon';
@@ -94,18 +97,25 @@ export const Capture: React.FC<CaptureProps> = ({
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
+  const [ocrLanguage, setOcrLanguageState] = useState<OcrLanguage>(getOcrLanguage);
+  // "Let everyone see it?" (words only, never the photo). Not offered during class hunts.
+  const [sharePublic, setSharePublic] = useState(false);
+  const [shareChoice, setShareChoice] = useState<ShareChoice>(emptyShareChoice);
+  const shareProblem = !originalWording.trim() || !intendedWording.trim()
+    ? 'Fill in "What it said" and "What they meant" to share.'
+    : textProblem(originalWording.trim()) || textProblem(intendedWording.trim()) || (!shareChoice.city ? 'Choose a city.' : !shareChoice.age13 ? 'Confirm you are 13 or older.' : null);
   const [ocrFailed, setOcrFailed] = useState(false);
   // Latest field values for the async reader (avoid overwriting what the user typed meanwhile).
   const fieldsRef = useRef({ title, originalWording, intendedWording });
   fieldsRef.current = { title, originalWording, intendedWording };
 
   /** Reads the photo on this device, then pre-fills the wording fields the user hasn't typed in yet. */
-  const readPhoto = async (source: File | string) => {
+  const readPhoto = async (source: File | string, language: OcrLanguage = ocrLanguage) => {
     setOcrLoading(true);
     setOcrFailed(false);
     setOcrProgress(null);
     try {
-      const result = await runOfflineOCR(source, p => setOcrProgress(p));
+      const result = await runOfflineOCR(source, p => setOcrProgress(p), language);
       if (!result) {
         setOcrFailed(true);
         return;
@@ -132,10 +142,7 @@ export const Capture: React.FC<CaptureProps> = ({
   const [chosenFixes, setChosenFixes] = useState<Record<string, string>>({});
 
   const applyFixes = (text: string, fixes: Record<string, string>) =>
-    Object.entries(fixes).reduce((out, [original, replacement]) => {
-      const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return out.replace(new RegExp(`\\b${escaped}\\b`, 'g'), matchCase(original, replacement));
-    }, text);
+    Object.entries(fixes).reduce((out, [original, replacement]) => out.split(original).join(matchCase(original, replacement)), text);
 
   /** Uses a chosen suggestion for one flagged word in "What they meant". */
   const applySuggestion = (original: string, replacement: string) => {
@@ -282,6 +289,22 @@ export const Capture: React.FC<CaptureProps> = ({
 
       const saved = await dbService.saveDiscovery(newDiscovery, compressed.imageBlob);
       const earned = await pointsLedger.lockDiscovery(saved);
+
+      let shareMessage = '';
+      if (sharePublic && !activeClassExpedition && !shareProblem) {
+        try {
+          const shared = await publicApi.share(saved, shareChoice);
+          const st = shared.publicPost;
+          shareMessage =
+            st?.status === 'posted'
+              ? ` Shared publicly in ${st.cityName}.`
+              : st?.status === 'queued'
+              ? ' It will be shared publicly when you\'re back online.'
+              : ` Not shared publicly: ${st?.error || 'the post was not accepted'}`;
+        } catch (err) {
+          shareMessage = ` Not shared publicly: ${(err as Error).message}`;
+        }
+      }
       recordCaptureActivity();
 
       // Speed Blitz only counts photos taken during the round, never old gallery pictures or repeats.
@@ -299,8 +322,9 @@ export const Capture: React.FC<CaptureProps> = ({
       setNotice(
         duplicateOf
           ? `Saved #${String(nextNum).padStart(3, '0')}. This photo was already scored before, so it earns no points.${blitzMessage}`
-          : `Saved #${String(nextNum).padStart(3, '0')} · +${earned} pts locked in.${blitzMessage}`
+          : `Saved #${String(nextNum).padStart(3, '0')} · +${earned} pts locked in.${blitzMessage}${shareMessage}`
       );
+      setSharePublic(false);
       onSaveComplete();
     } catch (err) {
       console.error('[Capture] Error cataloging discovery:', err);
@@ -418,7 +442,7 @@ export const Capture: React.FC<CaptureProps> = ({
                         : `Reading text on the photo… ${Math.round((ocrProgress?.progress || 0) * 100)}%`}
                     </span>
                     {ocrProgress?.stage === 'download' && (
-                      <span className="text-[10px] text-gray-300 px-4 text-center">First time only: about 7 MB, then it works offline.</span>
+                      <span className="text-[10px] text-gray-300 px-4 text-center">One-time download (a few MB per language), then it works offline.</span>
                     )}
                   </div>
                 )}
@@ -443,6 +467,31 @@ export const Capture: React.FC<CaptureProps> = ({
                   </button>
                 )}
               </div>
+              {ocrSupported && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-xs font-mono">
+                  <label htmlFor="ocr-language" className="font-bold text-gray-600">Sign language:</label>
+                  <select
+                    id="ocr-language"
+                    value={ocrLanguage}
+                    disabled={ocrLoading}
+                    onChange={e => {
+                      const lang = e.target.value as OcrLanguage;
+                      setOcrLanguage(lang);
+                      setOcrLanguageState(lang);
+                      // Re-read in the new language; clear what the last read filled in.
+                      setOriginalWording('');
+                      setIntendedWording('');
+                      fieldsRef.current = { ...fieldsRef.current, originalWording: '', intendedWording: '' };
+                      if (imageFile || imagePreview) void readPhoto(imageFile || imagePreview!, lang);
+                    }}
+                    className="p-1.5 border-2 border-black rounded-lg bg-white font-bold"
+                  >
+                    {OCR_LANGUAGES.map(l => (
+                      <option key={l.code} value={l.code}>{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -527,6 +576,10 @@ export const Capture: React.FC<CaptureProps> = ({
                       ))}
                     </ul>
                   </div>
+                ) : !ocrResult.spellchecked ? (
+                  <p className="text-[11px] font-mono text-gray-700">
+                    The app can read this language but can't check its spelling yet. Tell us what's wrong and what they meant below.
+                  </p>
                 ) : (
                   <p className="text-[11px] font-mono text-gray-700">
                     No misspelt words found. The mistake may be a real word in the wrong place (like "Soap of the Day"), grammar or a translation, so tell us what they meant below.
@@ -652,6 +705,27 @@ export const Capture: React.FC<CaptureProps> = ({
             />
           </div>
         </div>
+
+        {/* Let everyone see it? */}
+        {!activeClassExpedition && (
+          <div className="editorial-card p-5 rounded-2xl bg-white space-y-3">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={sharePublic} onChange={e => setSharePublic(e.target.checked)} className="mt-1" />
+              <span>
+                <span className="block text-xs font-bold uppercase tracking-wider font-heading text-black">Let everyone see it?</span>
+                <span className="block text-xs font-mono text-gray-600 mt-0.5">
+                  Share the words (not the photo) on your city's public typo feed.
+                </span>
+              </span>
+            </label>
+            {sharePublic && (
+              <>
+                <PublicShareFields value={shareChoice} onChange={setShareChoice} idPrefix="capture-share" />
+                {shareProblem && <p className="text-xs font-mono font-bold text-[#D66A4A]" role="status">{shareProblem}</p>}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Submit Actions */}
         <div className="pt-2">

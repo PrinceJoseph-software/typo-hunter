@@ -1,6 +1,8 @@
 # Phase 2 design: public typo posts by city
 
-**Status:** proposal, awaiting owner approval. Nothing here is built yet.
+**Status:** approved by the owner and **built**, except the neighbourhood unlock (city level only for now). To switch it on, see [`PUBLIC_FEED_SETUP.md`](PUBLIC_FEED_SETUP.md).
+
+**Decisions after review:** posters may show a **unique public nickname** (look-alike spellings are blocked to prevent impersonation); 3 flags hide a post, so a weekly review is enough; the database is **Neon** via Vercel; text reading supports 9 languages. Two details differ from the plan below: cities are a bundled list on the server rather than a database table, and all routes run in one Vercel Function.
 
 ## Goal
 
